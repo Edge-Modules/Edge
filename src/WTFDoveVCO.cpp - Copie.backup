@@ -1,0 +1,500 @@
+#include "Edge.hpp"
+#include "dsp/resampler.hpp"
+#include "dsp/filter.hpp"
+
+#include <iostream>
+#include <fstream>
+
+using namespace std;
+
+
+template <int OVERSAMPLE, int QUALITY>
+struct VoltageControlledOscillator {
+	bool analog = false;
+	bool soft = false;
+	float lastSyncValue = 0.0f;
+	float phase = 0.0f;
+	float freq;
+	float pw = 0.5f;
+	float pitch;
+	//
+	float width;
+	float widthCv;
+	float _dual;
+	float al_window = 0.5f;
+	float ar_window = 0.5f;
+	float bl_window = 0.5f;
+	float br_window = 0.5f;
+	//
+	bool syncEnabled = false;
+	bool syncDirection = false;
+	bool invert = false;
+    bool tab_loaded = false;
+	//FILE * temp_file_out = NULL;
+    FILE * wave_f = NULL;
+	short temp_buf[256]{0};
+
+	float buf_wavefront[256]{0};
+    float buf_wavefront_t1[256]{0};
+	float buf_wavefront_t2[256]{0};
+
+	float buf_waverear[256]{0};
+	float buf_waverear_t1[256]{0};
+	float buf_waverear_t2[256]{0};
+
+	float buf_finalwave[256]{0};
+
+    string plug_directory = assetPlugin(plugin, "res/waves/");
+	float wave[64][256]{0};
+    string wavefiles[64]{"00.wav","01.wav","02.wav","03.wav","04.wav","05.wav","06.wav","07.wav","08.wav","09.wav","10.wav","11.wav","12.wav","13.wav","14.wav","15.wav","16.wav","17.wav","18.wav","19.wav","20.wav","21.wav","22.wav","23.wav","24.wav","25.wav","26.wav","27.wav","28.wav","29.wav","30.wav","31.wav","32.wav","33.wav","34.wav","35.wav","36.wav","37.wav","38.wav","39.wav","40.wav","41.wav","42.wav","43.wav","44.wav","45.wav","46.wav","47.wav","48.wav","49.wav","50.wav","51.wav","52.wav","53.wav","54.wav","55.wav","56.wav","57.wav","58.wav","59.wav","60.wav","61.wav","62.wav","63.wav"};
+
+
+	Decimator<OVERSAMPLE, QUALITY> sinDecimator;
+
+	RCFilter sqrFilter;
+
+	// For analog detuning effect
+	float pitchSlew = 0.0f;
+	int pitchSlewIndex = 0;
+
+	float sinBuffer[OVERSAMPLE] = {};
+	float triBuffer[OVERSAMPLE] = {};
+	float sawBuffer[OVERSAMPLE] = {};
+	float sqrBuffer[OVERSAMPLE] = {};
+
+
+
+	void setWaveTabs(){
+        int counter = 0;
+	    for(int j=0; j<64; j++){
+            string file_name = plug_directory+wavefiles[j];
+            const char *c = file_name.c_str();
+            if((wave_f = fopen(c,"r"))!=NULL){
+                fseek(wave_f,44,SEEK_SET);
+                fread(temp_buf,sizeof(temp_buf),256,wave_f);
+                for(int i = 0; i<256 ; i++){
+                    wave[j][i] = ((float)temp_buf[i])/pow(256,2);
+                    counter++;
+                }
+                fclose(wave_f);
+            }
+        }
+        if(counter<=16000){
+            tab_loaded=false;
+        }
+        else{
+            tab_loaded=true;
+        }
+
+	}
+
+	void setPitch(float pitchKnob, float pitchCv, float _lfo_param) {
+		// Compute frequency
+		pitch = pitchKnob;
+		if (analog) {
+			// Apply pitch slew
+			const float pitchSlewAmount = 3.0f;
+			pitch += pitchSlew * pitchSlewAmount;
+		}
+		else {
+			// Quantize coarse knob if digital mode
+			pitch = roundf(pitch);
+		}
+		pitch += pitchCv;
+		// Note C4
+		if(_lfo_param == 0){
+          freq = 261.626f * powf(2.0f, pitch / 12.0f);
+		}
+		else{
+            pitch = fminf(pitch, 10.0f);
+            freq = powf(2.0f, pitch);
+		}
+
+	}
+
+	void setInvert(float _invert){
+        if(_invert<0.5f){
+            invert = false;
+        }
+        else{
+            invert = true;
+        }
+
+	}
+	////////////////////////////////////////////////////////////////////////////////////////////////////////
+	void setWaveFront(float _wavefront, float cv_wavefront){
+        int wav_num = _wavefront*63 + cv_wavefront*6.3;
+        wav_num = clamp(wav_num,0,63);
+        float var_wav_num = _wavefront*63 + cv_wavefront*6.3;
+        if(var_wav_num >= 63){
+            var_wav_num = 63;
+        }
+        if(var_wav_num <= 0){
+            var_wav_num = 0;
+        }
+
+
+        float dif_wav_num = var_wav_num - wav_num;
+        float coef1 = 1 - dif_wav_num;
+        float coef2 = dif_wav_num;
+        for(int i = 0; i<256; i++){
+            buf_wavefront_t1[i] = coef1*wave[wav_num][i];
+            if(wav_num<63){
+                buf_wavefront_t2[i] = coef2*wave[wav_num+1][i];
+            }
+            else{
+                buf_wavefront_t2[i] = coef2*wave[wav_num][i];
+            }
+            buf_wavefront[i] = buf_wavefront_t1[i]+buf_wavefront_t2[i];
+        }
+
+	}
+
+    void setWaveRear(float _waverear, float cv_waverear){
+        int wav_num = _waverear*63 + cv_waverear*6.3;
+        wav_num = clamp(wav_num,0,63);
+        float var_wav_num = _waverear*63 + cv_waverear*6.3;
+        if(var_wav_num >= 63){
+            var_wav_num = 63;
+        }
+        if(var_wav_num <= 0){
+            var_wav_num = 0;
+        }
+
+
+        float dif_wav_num = var_wav_num - wav_num;
+        float coef1 = 1 - dif_wav_num;
+        float coef2 = dif_wav_num;
+        for(int i = 0; i<256; i++){
+            buf_waverear_t1[i] = coef1*wave[wav_num][i];
+            if(wav_num<63){
+                buf_waverear_t2[i] = coef2*wave[wav_num+1][i];
+            }
+            else{
+                buf_waverear_t2[i] = coef2*wave[wav_num][i];
+            }
+            buf_waverear[i] = buf_waverear_t1[i]+buf_waverear_t2[i];
+        }
+
+	}
+
+	void setPulseWidth(float pulseWidth) {
+		const float pwMin = 0.01f;
+		pw = clamp(pulseWidth, pwMin, 1.0f - pwMin);
+	}
+
+	//
+	void setWidth(float widthKnob,float widthCv, float dual) {
+        width = widthKnob;
+        width += (widthCv/10);
+        if(width>1){width=1;}
+        if(width<0){width=0;}
+        _dual = 1-dual;
+
+        if(_dual < 0.5f){
+            al_window = 0.5f - (width/2);
+            ar_window = 0.5f + (width/2);
+        }
+        else{
+            al_window = 0.25f - (width/4);
+            ar_window = 0.25f + (width/4);
+            bl_window = 0.75f - (width/4);
+            br_window = 0.75f + (width/4);
+        }
+	}
+
+
+	void process(float deltaTime, float syncValue) {
+		/*if (analog) {
+			// Adjust pitch slew
+			if (++pitchSlewIndex > 32) {
+				const float pitchSlewTau = 100.0f; // Time constant for leaky integrator in seconds
+				pitchSlew += (randomNormal() - pitchSlew / pitchSlewTau) * engineGetSampleTime();
+				pitchSlewIndex = 0;
+			}
+		}*/
+		// Advance phase
+		/*if(!tab_loaded){
+            setWaveTabs();
+            tab_loaded = true;
+		}
+*/
+		float deltaPhaseOver = clamp(freq * deltaTime, 1e-6, 0.5f)*(1.0f / OVERSAMPLE);
+
+		// Detect sync
+		int syncIndex = -1; // Index in the oversample loop where sync occurs [0, OVERSAMPLE)
+		float syncCrossing = 0.0f; // Offset that sync occurs [0.0f, 1.0f)
+		if (syncEnabled) {
+			syncValue -= 0.01f;
+			if (syncValue > 0.0f && lastSyncValue <= 0.0f) {
+				float deltaSync = syncValue - lastSyncValue;
+				syncCrossing = 1.0f - syncValue / deltaSync;
+				syncCrossing *= OVERSAMPLE;
+				syncIndex = (int)syncCrossing;
+				syncCrossing -= syncIndex;
+			}
+			lastSyncValue = syncValue;
+		}
+
+		if (syncDirection)
+			deltaPhaseOver *= -1.0f;
+		sqrFilter.setCutoff(40.0f * deltaTime);
+
+
+		for(int i = 0; i<256 ; i++){
+            if(invert){
+               if(_dual < 0.5f){
+                    if( phase > al_window and phase < ar_window) {
+                        buf_finalwave[i] = buf_waverear[255-i];
+                    }
+                    else{
+                        buf_finalwave[i] = buf_wavefront[i];
+                    }
+               }
+               else{
+                    if( (phase > al_window and phase < ar_window) or (phase > bl_window and phase < br_window)) {
+                        buf_finalwave[i] = buf_waverear[255-i];
+                    }
+                   else{
+                        buf_finalwave[i] = buf_wavefront[i];
+                   }
+               }
+            }
+            else{
+                if(_dual < 0.5f){
+                    if( phase > al_window and phase < ar_window) {
+                        buf_finalwave[i] = buf_waverear[i];
+                    }
+                    else{
+                        buf_finalwave[i] = buf_wavefront[i];
+                    }
+                }
+                else{
+                    if( (phase > al_window and phase < ar_window) or (phase > bl_window and phase < br_window)) {
+                        buf_finalwave[i] = buf_waverear[i];
+                    }
+                   else{
+                        buf_finalwave[i] = buf_wavefront[i];
+                   }
+                }
+            }
+		}
+
+
+
+        for (int i = 0; i < OVERSAMPLE; i++) {
+            if (syncIndex == i) {
+				if (soft) {
+					syncDirection = !syncDirection;
+					deltaPhaseOver *= -1.0f;
+				}
+				else {
+					// phase = syncCrossing * deltaPhase / OVERSAMPLE;
+					phase = 0.0f;
+				}
+			}
+			/*
+            if(invert) {
+                sinBuffer[i] = 1.66f * interpolateLinear(buf_wavefront, phase * 255.f) ;
+                sawBuffer[i] = 1.66f * interpolateLinear(buf_waverear, ((-1.0f*phase)+1.0f) * 255.f);
+            }
+            else{
+                sinBuffer[i] = 1.66f * interpolateLinear(buf_wavefront, phase * 255.f);
+                sawBuffer[i] = 1.66f * interpolateLinear(buf_waverear, phase * 255.f);
+            }
+
+            if(_dual < 0.5f){
+                if( phase > al_window and phase < ar_window) {
+                    sinBuffer[i] = sawBuffer[i];
+                }
+            }
+            else{
+                if( (phase > al_window and phase < ar_window) or (phase > bl_window and phase < br_window)) {
+                    sinBuffer[i] = sawBuffer[i];
+                }
+            }
+            */
+			// Advance phase
+			sinBuffer[i]=1.66f * interpolateLinear(buf_finalwave, phase * 256.0f) ;
+
+			phase += deltaPhaseOver;
+			while (phase > 1.0f) {
+                phase -= 1.0f;
+            }
+            while (phase < 0) {
+                phase += 1.0f;
+            }
+		}
+	}
+
+	float sin() {
+		return sinDecimator.process(sinBuffer);
+	}
+	/*float saw() {
+		return sawDecimator.process(sawBuffer);
+	}*/
+	float light() {
+		return sinf(2*M_PI * phase);
+	}
+};
+
+
+struct WTFDoveVCO : Module {
+	enum ParamIds {
+		MODE_PARAM,
+		INVERT_PARAM,
+		LFO_NOISE_PARAM,
+		FRONT_PARAM,
+        WIDTH_PARAM,
+		REAR_PARAM,
+		CV_FRONT_PARAM,
+        CV_WIDTH_PARAM,
+		CV_REAR_PARAM,
+		FREQ_PARAM,
+		FINE_PARAM,
+		FM_PARAM,
+		NUM_PARAMS
+	};
+	enum InputIds {
+	    FM_INPUT,
+		PITCH_INPUT,
+		FRONT_INPUT,
+		WIDTH_INPUT,
+		REAR_INPUT,
+		NUM_INPUTS
+	};
+	enum OutputIds {
+		OUTPUT,
+		NUM_OUTPUTS
+	};
+	enum LightIds {
+		//PHASE_POS_LIGHT,
+	//	PHASE_NEG_LIGHT,
+		NUM_LIGHTS
+	};
+
+	VoltageControlledOscillator<16, 16> oscillator;
+
+	WTFDoveVCO() : Module(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS) {
+	srand(time(0));
+	}
+	void step() override;
+};
+
+
+void WTFDoveVCO::step() {
+	oscillator.analog =  0.0f;
+	oscillator.soft =  0.0f;
+	if(oscillator.tab_loaded ==false ){
+        oscillator.setWaveTabs();
+	}
+
+	float pitchFine = 3.0f * quadraticBipolar(params[FINE_PARAM].value);
+	float pitchCv = 12.0f * inputs[PITCH_INPUT].value;
+	if (inputs[FM_INPUT].active) {
+		pitchCv += quadraticBipolar(params[FM_PARAM].value) * 12.0f * inputs[FM_INPUT].value;
+	}
+	oscillator.setPitch(params[FREQ_PARAM].value, pitchFine + pitchCv,params[LFO_NOISE_PARAM].value);
+	oscillator.setPulseWidth(0.5f);//oscillator.setPulseWidth(params[PW_PARAM].value + params[WIDTH_PARAM].value * inputs[PW_INPUT].value / 10.0f);
+	oscillator.syncEnabled = params[LFO_NOISE_PARAM].value;
+    oscillator.setInvert(params[INVERT_PARAM].value);
+    /*
+    if(!oscillator.tab_loaded){
+        oscillator.setWaveTabs();
+        oscillator.tab_loaded = true;
+    }
+    */
+
+    oscillator.setWidth( params[WIDTH_PARAM].value,(inputs[WIDTH_INPUT].value*params[CV_WIDTH_PARAM].value),params[MODE_PARAM].value) ;
+	oscillator.setWaveFront(params[FRONT_PARAM].value,(params[CV_FRONT_PARAM].value*inputs[FRONT_INPUT].value));
+	oscillator.setWaveRear(params[REAR_PARAM].value,(params[CV_REAR_PARAM].value*inputs[REAR_INPUT].value));
+
+	if(params[LFO_NOISE_PARAM].value == 1 ){
+        oscillator.process(engineGetSampleTime(), inputs[FM_INPUT].value);
+	}
+	else{
+        oscillator.process(engineGetSampleTime(),0.0f);
+	}
+
+	// Set output
+	if (outputs[OUTPUT].active)
+		outputs[OUTPUT].value = 5.0f * oscillator.sin();
+
+
+}
+
+struct OscDisplay : TransparentWidget {
+	WTFDoveVCO *module;
+	std::shared_ptr<Font> font;
+	OscDisplay() {
+		//font = Font::load(assetPlugin(plugin, "res/DejaVuSansMono.ttf"));
+	}
+
+void draw(NVGcontext *vg) override {
+  //  float height = 100.0f;
+	//float width = 100.0f;
+//	float spacer = 3.0f;
+	nvgSave(vg);
+	nvgBeginPath(vg);
+    nvgRect(vg, 0,0, 64,56);
+    nvgFillColor(vg, nvgRGBA(37,37,37,255));
+    nvgFill(vg);
+    nvgRestore(vg);
+}
+};
+
+
+struct WTFDoveVCOWidget : ModuleWidget {
+	WTFDoveVCOWidget(WTFDoveVCO *module);
+};
+
+WTFDoveVCOWidget::WTFDoveVCOWidget(WTFDoveVCO *module) : ModuleWidget(module) {
+	setPanel(SVG::load(assetPlugin(plugin, "res/WTFDoveVCO.svg")));
+	addChild(Widget::create<ScrewSilver>(Vec(15, 0)));
+	addChild(Widget::create<ScrewSilver>(Vec(box.size.x-30, 0)));
+	addChild(Widget::create<ScrewSilver>(Vec(15, 365)));
+	addChild(Widget::create<ScrewSilver>(Vec(box.size.x-30, 365)));
+
+        OscDisplay *display = new OscDisplay();
+		display->module = module;
+		display->box.pos = Vec(43.0f, 32.0f);
+		display->box.size = Vec(110.0f, 68.0f);
+		addChild(display);
+
+
+	addParam(ParamWidget::create<CKSS>(Vec(13, 50), module, WTFDoveVCO::MODE_PARAM, 0.0f, 1.0f, 1.0f));
+	addParam(ParamWidget::create<CKSS>(Vec(124, 50), module, WTFDoveVCO::INVERT_PARAM, 0.0f, 1.0f, 0.0f));
+
+    addParam(ParamWidget::create<CKSS>(Vec(67, 8), module, WTFDoveVCO::LFO_NOISE_PARAM, 0.0f, 1.0f, 0.0f));
+	//addParam(ParamWidget::create<CKSSThree>(Vec(129, 47), module, WTFDoveVCO::LFO_NOISE_PARAM, 0.0f, 2.0f, 0.0f));
+
+
+    addParam(ParamWidget::create<RoundBlackKnob>(Vec(11, 126), module, WTFDoveVCO::FRONT_PARAM, 0.0f, 1.0f, 0.0f));
+	addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(57, 113), module, WTFDoveVCO::WIDTH_PARAM, 0.0f, 1.0f, 0.0f));
+	addParam(ParamWidget::create<RoundBlackKnob>(Vec(111, 125), module, WTFDoveVCO::REAR_PARAM, 0.0f, 1.0f, 0.0f));
+
+	addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(13, 190), module, WTFDoveVCO::CV_FRONT_PARAM, 0.0f, 1.0f, 0.0f));
+	addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(63, 190), module, WTFDoveVCO::CV_WIDTH_PARAM, 0.0f, 1.0f, 0.0f));
+	addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(114, 190), module, WTFDoveVCO::CV_REAR_PARAM, 0.0f, 1.0f, 0.0f));
+
+
+    addParam(ParamWidget::create<RoundBlackKnob>(Vec(11, 245), module, WTFDoveVCO::FREQ_PARAM, -54.0f, 54.0f, 0.0f));
+    addParam(ParamWidget::create<RoundBlackKnob>(Vec(111, 245), module, WTFDoveVCO::FINE_PARAM, -1.0f, 1.0f, 0.0f));
+	addParam(ParamWidget::create<RoundBlackKnob>(Vec(61, 265), module, WTFDoveVCO::FM_PARAM, 0.0f, 1.0f, 0.0f));
+
+
+	addInput(Port::create<PJ301MPort>(Vec(11, 290), Port::INPUT, module, WTFDoveVCO::FM_INPUT));
+	//addInput(Port::create<PJ301MPort>(Vec(45, 276), Port::INPUT, module, WTFDoveVCO::FM_INPUT));
+	//addInput(Port::create<PJ301MPort>(Vec(80, 276), Port::INPUT, module, WTFDoveVCO::SYNC_INPUT));
+	addOutput(Port::create<PJ301MPort>(Vec(114, 290), Port::OUTPUT, module, WTFDoveVCO::OUTPUT));
+
+	addInput(Port::create<PJ301MPort>(Vec(11, 320), Port::INPUT, module, WTFDoveVCO::PITCH_INPUT));
+    addInput(Port::create<PJ301MPort>(Vec(45, 320), Port::INPUT, module, WTFDoveVCO::FRONT_INPUT));
+	addInput(Port::create<PJ301MPort>(Vec(80, 320), Port::INPUT, module, WTFDoveVCO::WIDTH_INPUT));
+	addInput(Port::create<PJ301MPort>(Vec(114, 320), Port::INPUT, module, WTFDoveVCO::REAR_INPUT));
+
+	//addChild(ModuleLightWidget::create<SmallLight<GreenRedLight>>(Vec(99, 42.5f), module, WTFDoveVCO::PHASE_POS_LIGHT));
+}
+
+
+Model *modelWTFDoveVCO = Model::create<WTFDoveVCO, WTFDoveVCOWidget>("Edge", "WTFDoveVCO", "WTFDoveVCO", OSCILLATOR_TAG);

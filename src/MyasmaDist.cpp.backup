@@ -1,0 +1,182 @@
+#include "Edge.hpp"
+#include "dsp/ringbuffer.hpp"
+#include "dsp/samplerate.hpp"
+#include "dsp/filter.hpp"
+
+
+
+inline float clip(float x) {
+	return tanhf(x);
+}
+
+struct FeedBack{
+
+    int buf_index=0;
+    float ffed = 0;
+    float in_Buffer[1000]{0};
+    float in_Buffer2[1000]{0};
+    int freq_ = 0;
+    float * data = 0;
+
+
+
+
+    /*-------------------------------------------*/
+    void CalculFreq(float _in){
+        freq_ = int( _in *900);
+    }
+
+    /*-------------------------------------------*/
+
+    void Set_FeedBack(float _in){
+
+        for(int i=0;i<1000;i++){
+            in_Buffer2[(i+1)%1000]=in_Buffer[i];
+        }
+        for(int i=0;i<1000;i++){
+            in_Buffer[i]=in_Buffer2[i];
+        }
+        in_Buffer[0]=_in;
+
+    }
+    /*-------------------------------------------*/
+
+
+    float GetFeedBack(){
+
+        //return in_Buffer.capacity()/10;
+        //return (in_Buffer.end-in_Buffer.start-1)/100;
+        //data =  in_Buffer.endData();
+        //return *data*5;
+        //return in_Buffer.shift();
+
+        return in_Buffer[freq_]*5;
+        //return in_Buffer.data[0];
+    }
+
+    /*-------------------------------------------*/
+
+};
+
+struct MyasmaDist : Module {
+	enum ParamIds {
+		FEEDBACK_PARAM,
+		GAIN_PARAM,
+		BLEND_PARAM,
+		CV_GAIN_PARAM,
+		CV_BLEND_PARAM,
+		NUM_PARAMS
+	};
+	enum InputIds {
+		CV_GAIN_INPUT,
+		IN_INPUT,
+		CV_FEEDBACK_INPUT,
+		FEEDBACK_INPUT,
+		NUM_INPUTS
+	};
+	enum OutputIds {
+		OUT_OUTPUT,
+		FEEDBACK_OUTPUT,
+		NUM_OUTPUTS
+	};
+	enum LightIds {
+		NUM_LIGHTS
+	};
+
+	FeedBack Feed;
+    float in = 0.0f;
+    float out = 0.0f;
+    float gain = 0.0f;
+    float blend = 0.0f;
+    float feedback = 0.0f;
+
+    float tension_pr = 0.0f;
+    float tension_se = 0.0f;
+
+
+	MyasmaDist() : Module(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS) {
+
+	}
+
+
+	void step() override;
+
+	// For more advanced Module features, read Rack's engine.hpp header file
+	// - toJson, fromJson: serialization of internal data
+	// - onSampleRateChange: event triggered by a change of sample rate
+	// - onReset, onRandomize, onCreate, onDelete: implements special behavior when user clicks these from the context menu
+};
+
+
+void MyasmaDist::step() {
+
+
+
+
+    tension_pr = 1.0f-params[FEEDBACK_PARAM].value;
+    tension_se = params[FEEDBACK_PARAM].value;
+    in = tension_pr* (inputs[IN_INPUT].value/5.0f);
+
+    Feed.CalculFreq(params[FEEDBACK_PARAM].value);
+
+    if(inputs[FEEDBACK_INPUT].active){
+        Feed.Set_FeedBack(inputs[FEEDBACK_INPUT].value/5.0f);
+    }
+    else{
+        Feed.Set_FeedBack(in+(tension_se*Feed.GetFeedBack()));
+    }
+
+
+    in += tension_se* Feed.GetFeedBack();
+    in = tanh(in*params[GAIN_PARAM].value);
+
+
+
+
+
+
+
+    out=params[BLEND_PARAM].value * in +((1-params[BLEND_PARAM].value)*(inputs[IN_INPUT].value/5.0f));
+    //out = tanh(in*gain);
+    //outputs[OUT_OUTPUT].value = tanh(out*gain)*5.0f;
+    outputs[OUT_OUTPUT].value = out*5.0f;
+    outputs[FEEDBACK_OUTPUT].value = tanh(Feed.GetFeedBack());
+    //outputs[FEEDBACK_OUTPUT].value = feedback_out*5.0f;
+
+
+
+}
+
+
+struct MyasmaDistWidget : ModuleWidget {
+	MyasmaDistWidget(MyasmaDist *module) : ModuleWidget(module) {
+		setPanel(SVG::load(assetPlugin(plugin, "res/MyasmaDist.svg")));
+
+		addChild(Widget::create<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
+		addChild(Widget::create<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
+		addChild(Widget::create<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		addChild(Widget::create<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+
+		addParam(ParamWidget::create<RoundHugeBlackKnob>(Vec(33, 61), module, MyasmaDist::FEEDBACK_PARAM, 0, 1.0, 0.0));
+		addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(12, 143), module, MyasmaDist::GAIN_PARAM, 0, 5.0, 1.0));
+		addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(71, 143), module, MyasmaDist::BLEND_PARAM, 0, 1.0, 0.0));
+		addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(12, 208), module, MyasmaDist::CV_GAIN_PARAM, -1.0, 1.0, 0.0));
+		addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(71, 208), module, MyasmaDist::CV_BLEND_PARAM, -1.0, 1.0, 0.0));
+
+		addInput(Port::create<PJ301MPort>(Vec(10, 276), Port::INPUT, module, MyasmaDist::CV_GAIN_INPUT));
+		addInput(Port::create<PJ301MPort>(Vec(48, 276), Port::INPUT, module, MyasmaDist::IN_INPUT));
+		addInput(Port::create<PJ301MPort>(Vec(85, 276), Port::INPUT, module, MyasmaDist::CV_FEEDBACK_INPUT));
+		addInput(Port::create<PJ301MPort>(Vec(10, 320), Port::INPUT, module, MyasmaDist::FEEDBACK_INPUT));
+
+		addOutput(Port::create<PJ301MPort>(Vec(48, 320), Port::OUTPUT, module, MyasmaDist::OUT_OUTPUT));
+		addOutput(Port::create<PJ301MPort>(Vec(85, 320), Port::OUTPUT, module, MyasmaDist::FEEDBACK_OUTPUT));
+
+	}
+};
+
+
+// Specify the Module and ModuleWidget subclass, human-readable
+// author name for categorization per plugin, module slug (should never
+// change), human-readable module name, and any number of tags
+// (found in `include/tags.hpp`) separated by commas.
+Model *modelMyasmaDist = Model::create<MyasmaDist, MyasmaDistWidget>("Edge", "MyasmaDist", "MyasmaDist", OSCILLATOR_TAG);
