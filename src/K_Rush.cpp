@@ -167,15 +167,16 @@ struct Diode{
                 phase_in=1.0f;
             if(Ov_Buffer[i]<0)
                 phase_in= -1.0f;
-            Ov_Buffer[i] = abs(gain * Ov_Buffer[i]);
-            index =  clamp(Ov_Buffer[i]-1.0f, 0.0f, 20.0f)*64;
+            Ov_Buffer[i] = abs(Ov_Buffer[i]*gain);
+            index =  clamp(Ov_Buffer[i]-1.0f, 0.0f, 20.0f)*gain;
+
             while(index>255){
                 index-=255;
             }
             while(index<0){
                 index+=255;
             }
-            Ov_Buffer[i] =  Ov_Buffer[i]-((gain/2-1.0f) * interpolateLinear(wave[type],index));
+            Ov_Buffer[i] =  Ov_Buffer[i]-( gain*interpolateLinear(wave[type],index));
 
             Ov_Buffer[i] = Ov_Buffer[i]*phase_in;
 
@@ -258,10 +259,14 @@ struct K_Rush : Module {
 
 void K_Rush::step() {
 
+
+    float gain = params[GAIN_PARAM].value;
+
+
     feed_back = params[FEEDBACK_PARAM].value + (params[CV_FEEDBACK_PARAM].value*inputs[CV_FEEDBACK_INPUT].value);
     feed_back = clamp(feed_back,0.0f,1.0f);
-    float in = (inputs[IN_INPUT].value/5.0f)-(inputs[FEEDBACK_INPUT].value/5.0f*feed_back);
-    float gain = params[GAIN_PARAM].value;
+    float in = (inputs[IN_INPUT].value/5.0f)-((inputs[FEEDBACK_INPUT].value/5.0f)/clamp(16/gain,1.0f,16.0f) *feed_back);
+
 
     if(inputs[CV_GAIN_INPUT].active)
         gain += (inputs[CV_GAIN_INPUT].value*params[CV_GAIN_PARAM].value);
