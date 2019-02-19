@@ -385,7 +385,7 @@ struct MyasmaDistWidget : ModuleWidget {
 		addChild(Widget::create<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
 		addParam(ParamWidget::create<RoundHugeBlackKnob>(Vec(33, 61), module, MyasmaDist::FEEDBACK_PARAM, 0.0f, 1.0f, 0.0f));
-		addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(12, 143), module, MyasmaDist::GAIN_PARAM, 0.0f, 8.0f, 1.0f));
+		addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(12, 143), module, MyasmaDist::GAIN_PARAM, 0.0f, 16.0f, 1.0f));
 		addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(71, 143), module, MyasmaDist::BLEND_PARAM, 0.0f, 1.0f, 0.0f));
 		addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(12, 208), module, MyasmaDist::CV_GAIN_PARAM, -1.0f, 1.0f, 0.0f));
 		addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(71, 208), module, MyasmaDist::CV_FEEDBACK_PARAM, 0.0f, 0.3f, 0.0f));
