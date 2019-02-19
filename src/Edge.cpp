@@ -9,5 +9,5 @@ void init(rack::Plugin *p) {
 	p->version = TOSTRING(VERSION);
 	p->addModel (modelWTFDoveVCO);
 	//p->addModel (modelWTFDoveVCO_IIR);
-	p->addModel (modelMyasmaDist);
+	p->addModel (modelK_Rush);
 }

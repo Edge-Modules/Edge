@@ -13,4 +13,4 @@ extern Plugin *plugin;
 
 extern Model *modelWTFDoveVCO;
 //extern Model *modelWTFDoveVCO_IIR;
-extern Model *modelMyasmaDist;
+extern Model *modelK_Rush;
