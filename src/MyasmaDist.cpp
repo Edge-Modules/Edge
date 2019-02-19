@@ -4,7 +4,13 @@
 #include "Dep/LambertW.hpp"
 #include "dsp/resampler.hpp"
 #include "dsp/filter.hpp"
+#include <iostream>
+#include <fstream>
+#include <string>
 
+
+
+using namespace std;
 
 
 inline float clip(float x) {
@@ -14,43 +20,86 @@ inline float clip(float x) {
 /**Diode -> in  -1V / +1V **/
 struct Diode{
     float offset,limit1,limit2,phase_in, phase_out = 0.0f;
-    float d_memory[2]={0.0f};
     float weight_accum = 0;
+    Upsampler<16,16> Upsample;
+    Decimator<16,16> Decimate;
+    float Ov_Buffer[16] = {0};
+
+    RCFilter filter1;
+
+    string plug_directory = assetPlugin(plugin, "res/waves2/");
+	float wave[64][256]={{0}};
+    const string wavefiles[64]={"00.wav","01.wav","02.wav","03.wav","04.wav","05.wav","06.wav","07.wav","08.wav","09.wav","10.wav","11.wav","12.wav","13.wav","14.wav","15.wav","16.wav","17.wav","18.wav","19.wav","20.wav","21.wav","22.wav","23.wav","24.wav","25.wav","26.wav","27.wav","28.wav","29.wav","30.wav","31.wav","32.wav","33.wav","34.wav","35.wav","36.wav","37.wav","38.wav","39.wav","40.wav","41.wav","42.wav","43.wav","44.wav","45.wav","46.wav","47.wav","48.wav","49.wav","50.wav","51.wav","52.wav","53.wav","54.wav","55.wav","56.wav","57.wav","58.wav","59.wav","60.wav","61.wav","62.wav","63.wav"};
+    FILE * wave_f = NULL;
+	short temp_buf[256]={0};
+    bool tab_loaded = false;
 
 
+    void LoadWaves(){
 
+        for(int j=0; j<64; j++){
+            float chkcnt = 0;
+            string file_name = plug_directory+wavefiles[j];
+            const char *c = file_name.c_str();
+            wave_f = fopen(c,"r");
+            if(wave_f!=NULL){
+                fseek(wave_f,44,SEEK_SET);
+                fread(temp_buf,sizeof(temp_buf),256,wave_f);
+                for(int i = 0; i<256 ; i++){
+                    if(temp_buf[i]!=0.0f){
+                        chkcnt++;
+                    }
+                    wave[j][i] = ((float)temp_buf[i]/pow(256,2)+0.5);
 
-
-
-
-
-    float proc_f_d1(float in, float gain, int type){
-
-
-        float weight = 0.0f;
-        d_memory[1] = d_memory[0];
-        d_memory[0] = in*gain;
-
-        weight = abs(d_memory[0] - d_memory[1]);
-
-
-        if(d_memory[0] >= d_memory[1]){
-            phase_in = 1.0f;
+                }
+                if(chkcnt == 0){
+                tab_loaded = false;
+                j=64;
+                }
+                fclose(wave_f);
+            }
+            else{
+                tab_loaded = false;
+            }
+            if(j==63){
+                tab_loaded=true;
+            }
         }
-        else{
-            phase_in = -1.0f;
+         //_fcloseall();
+
+    }
+
+
+
+    float proc_f_d1(float in, float gain, int type,float feedback){
+
+        if(tab_loaded == false){
+            LoadWaves();
         }
 
-        phase_out = phase_in;
-        weight_accum += weight* phase_in;
 
-        if(weight_accum > 1.0f)
-            weight_accum = weight_accum-weight;
-        if(weight_accum < -1.0f)
-            weight_accum = weight_accum+weight;
+       // in *= gain;
+        //float weight = 0.0f;
 
 
+        //weight = abs(d_memory[0] - d_memory[1]);
 
+
+
+
+        //phase_out = phase_in;
+       // weight_accum += weight* phase_in;
+/*
+        if(weight_accum > 1.0f){
+            weight_accum = d_memory[0]-weight*-1;
+
+        }
+        if(weight_accum < -1.0f){
+            weight_accum = d_memory[0]+weight*-1;
+        }
+
+
+*/
 
         //weight_accum = clamp(weight_accum,-1.0f,1.0f);
 
@@ -59,7 +108,7 @@ struct Diode{
 
         //weight = clamp( weight, -0.1, 0.1);
 
-         float out = weight_accum;
+       //  float out = weight_accum;
 
        // float out = d_memory[1] + (weight*phase);
 
@@ -110,8 +159,33 @@ struct Diode{
 
         //out=tanh(gain*out);
 
+        Upsample.process(in,Ov_Buffer);
+        filter1.setCutoff((44100 *engineGetSampleTime()/16));
+        float index= 0.0f;
 
+        for(int i = 0 ; i< 16 ; i++){
 
+            if(Ov_Buffer[i]>=0)
+                phase_in=1.0f;
+            if(Ov_Buffer[i]<0)
+                phase_in= -1.0f;
+            Ov_Buffer[i] = abs(gain * Ov_Buffer[i]);
+            index =  clamp(Ov_Buffer[i]-1.0f, 0.0f, 20.0f)*64;
+            while(index>255){
+                index-=255;
+            }
+            while(index<0){
+                index+=255;
+            }
+            Ov_Buffer[i] =  Ov_Buffer[i]-((gain/2-1.0f) * interpolateLinear(wave[type],index));
+
+            Ov_Buffer[i] = Ov_Buffer[i]*phase_in;
+
+            filter1.process(Ov_Buffer[i]);
+            Ov_Buffer[i]=filter1.lowpass();
+        }
+        in=Decimate.process(Ov_Buffer);
+        float out = clamp(in,-1.0f,1.0f);
         return out ;
 
 
@@ -148,16 +222,7 @@ struct MyasmaDist : Module {
 	};
 
 
-    Upsampler<8,16> Upsample;
-    Decimator<8,16> Decimate;
-    float Ov_Buffer[2] = {0};
-
-    RCFilter filter1;
-
-	float buff[44100]={0};
-	float state[4]{0};
-	float omega0;
-	float last_step = 0.0f;
+    float feed_back = 0.0f;
 
 
 	/*****************
@@ -195,12 +260,15 @@ struct MyasmaDist : Module {
 
 void MyasmaDist::step() {
 
-
-    float in = inputs[IN_INPUT].value/5;
+    feed_back = params[FEEDBACK_PARAM].value + (params[CV_FEEDBACK_PARAM].value*inputs[CV_FEEDBACK_INPUT].value);
+    feed_back = clamp(feed_back,0.0f,1.0f);
+    float in = (inputs[IN_INPUT].value/5.0f)-(inputs[FEEDBACK_INPUT].value/5.0f*feed_back);
     float gain = params[GAIN_PARAM].value;
+
     if(inputs[CV_GAIN_INPUT].active)
         gain += (inputs[CV_GAIN_INPUT].value*params[CV_GAIN_PARAM].value);
 
+    gain = clamp(gain,0.0f,16.0f);
 
 
     /*****WAvefolder chelou (1 seule rebond en haut / infini en bas
@@ -236,10 +304,11 @@ void MyasmaDist::step() {
 
     //in=gain*in;
 
-    in = d_pos.proc_f_d1(in ,gain,1);
-    /*
 
-    Upsample.process(in,Ov_Buffer);
+   // in = d_pos.proc_f_d1(in ,gain,1);
+
+
+    /*
 
     filter1.setCutoff(40 / (engineGetSampleTime()/16));
     for(int i = 0 ; i< 16 ; i++){
@@ -250,13 +319,16 @@ void MyasmaDist::step() {
 
 
     // DECIMATION !
-    // in=Decimate.process(Ov_Buffer);
+     in=Decimate.process(Ov_Buffer);
 
 
     //in = Decimate.process(Ov_Buffer);
     //in = clamp(in,-5.0f,5.0f);
 */
+    int type_diode = int(params[BLEND_PARAM].value *16);
+    in = d_pos.proc_f_d1(in ,gain,type_diode,params[FEEDBACK_PARAM].value);
     outputs[OUT_OUTPUT].value = in*5;
+    outputs[FEEDBACK_OUTPUT].value = in*5;
 /*
     //float out = in;
 
@@ -312,11 +384,11 @@ struct MyasmaDistWidget : ModuleWidget {
 		addChild(Widget::create<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		addChild(Widget::create<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-		addParam(ParamWidget::create<RoundHugeBlackKnob>(Vec(33, 61), module, MyasmaDist::FEEDBACK_PARAM, 0.01f, 5.0f, 0.0f));
-		addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(12, 143), module, MyasmaDist::GAIN_PARAM, 0.0f, 20.0f, 1.0f));
+		addParam(ParamWidget::create<RoundHugeBlackKnob>(Vec(33, 61), module, MyasmaDist::FEEDBACK_PARAM, 0.0f, 1.0f, 0.0f));
+		addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(12, 143), module, MyasmaDist::GAIN_PARAM, 0.0f, 8.0f, 1.0f));
 		addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(71, 143), module, MyasmaDist::BLEND_PARAM, 0.0f, 1.0f, 0.0f));
 		addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(12, 208), module, MyasmaDist::CV_GAIN_PARAM, -1.0f, 1.0f, 0.0f));
-		addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(71, 208), module, MyasmaDist::CV_FEEDBACK_PARAM, -1.0f, 1.0f, 0.0f));
+		addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(71, 208), module, MyasmaDist::CV_FEEDBACK_PARAM, 0.0f, 0.3f, 0.0f));
 
 		addInput(Port::create<PJ301MPort>(Vec(10, 276), Port::INPUT, module, MyasmaDist::CV_GAIN_INPUT));
 		addInput(Port::create<PJ301MPort>(Vec(48, 276), Port::INPUT, module, MyasmaDist::IN_INPUT));
@@ -335,3 +407,6 @@ struct MyasmaDistWidget : ModuleWidget {
 // change), human-readable module name, and any number of tags
 // (found in `include/tags.hpp`) separated by commas.
 Model *modelMyasmaDist = Model::create<MyasmaDist, MyasmaDistWidget>("Edge", "MyasmaDist", "MyasmaDist", OSCILLATOR_TAG);
+
+
+
