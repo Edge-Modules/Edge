@@ -136,7 +136,7 @@ struct Diode{
 */
         //float temp=in;
 
-        /**-> 0 à +1 **/
+        /**-> 0 ï¿½ +1 **/
 
         //if(in<0)
           //  in=in*-1;
@@ -176,7 +176,7 @@ struct Diode{
             while(index<0){
                 index+=255;
             }
-            Ov_Buffer[i] =  Ov_Buffer[i]-( gain*interpolateLinear(wave[type],index));
+            Ov_Buffer[i] =  Ov_Buffer[i]-((gain-1)*interpolateLinear(wave[type],index));
 
             Ov_Buffer[i] = Ov_Buffer[i]*phase_in;
 
