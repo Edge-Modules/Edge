@@ -60,7 +60,6 @@ struct VoltageControlledOscillator {
     void LoadWaves(){
 
         for(int j=0; j<64; j++){
-            float chkcnt = 0;
             string file_name = plug_directory+wavefiles[j];
             const char *c = file_name.c_str();
             wave_f = fopen(c,"r");
@@ -68,27 +67,16 @@ struct VoltageControlledOscillator {
                 fseek(wave_f,44,SEEK_SET);
                 fread(temp_buf,sizeof(temp_buf),256,wave_f);
                 for(int i = 0; i<256 ; i++){
-                    if(temp_buf[i]!=0.0f){
-                        chkcnt++;
-                    }
                     wave[j][i] = ((float)temp_buf[i])/pow(256,2);
-                }
-                if(chkcnt == 0){
-                tab_loaded = false;
-                j=64;
                 }
                 fclose(wave_f);
             }
             else{
-                tab_loaded = false;
-            }
-            if(j==63){
-                tab_loaded=true;
+                j--;
             }
         }
-         //_fcloseall();
-
-        }
+        tab_loaded = true;
+    }
 
 
 
