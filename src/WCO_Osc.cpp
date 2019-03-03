@@ -294,8 +294,8 @@ struct VoltageControlledOscillator {
             }
         //}
 
-        sqrFilter.setCutoff(22050.0f * deltaTime);
-        mid_phase=phase+0.03f;
+        sqrFilter.setCutoff(22050.0f * (deltaTime/OVERSAMPLE));
+        mid_phase=phase; // +0.03f;
         while (mid_phase > 1.0f) {
             mid_phase -= 1.0f;
         }
@@ -309,7 +309,7 @@ struct VoltageControlledOscillator {
 					phase = 0.0f;
 			}
 			// Advance phase
-            sinBuffer[i]=1.66f * interpolateLinear(buf_final, mid_phase*255.0f) ;
+            sinBuffer[i]=1.66f * interpolateLinear(buf_final, phase*255.0f) ;
             sqrFilter.process(sinBuffer[i]);
             sinBuffer[i]=sqrFilter.lowpass();
             phase += deltaPhaseOver;
@@ -371,7 +371,7 @@ struct WCO_Osc : Module {
 		NUM_LIGHTS
 	};
 
-	VoltageControlledOscillator<4, 16> oscillator;
+	VoltageControlledOscillator<16, 16> oscillator;
 	FILE * wave_f = NULL;
 	float  BUFFER[256]={0};
 	float l_FRONT_PARAM=1.0f;
