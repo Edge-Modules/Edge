@@ -294,8 +294,8 @@ struct VoltageControlledOscillator {
             }
         //}
 
-        sqrFilter.setCutoff(22050.0f * (deltaTime/OVERSAMPLE));
-        mid_phase=phase; // +0.03f;
+        sqrFilter.setCutoff(44100.0f * (deltaTime/OVERSAMPLE));
+        mid_phase=phase +0.03f;
         while (mid_phase > 1.0f) {
             mid_phase -= 1.0f;
         }
@@ -309,7 +309,7 @@ struct VoltageControlledOscillator {
 					phase = 0.0f;
 			}
 			// Advance phase
-            sinBuffer[i]=1.66f * interpolateLinear(buf_final, phase*255.0f) ;
+            sinBuffer[i]=1.66f * interpolateLinear(buf_final, mid_phase*255.0f) ;
             sqrFilter.process(sinBuffer[i]);
             sinBuffer[i]=sqrFilter.lowpass();
             phase += deltaPhaseOver;
