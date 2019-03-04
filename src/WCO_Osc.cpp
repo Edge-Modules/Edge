@@ -62,6 +62,7 @@ struct VoltageControlledOscillator {
         for(int j=0; j<64; j++){
             string file_name = plug_directory+wavefiles[j];
             const char *c = file_name.c_str();
+            wave_f = NULL;
             wave_f = fopen(c,"r");
             if(wave_f!=NULL){
                 fseek(wave_f,44,SEEK_SET);
@@ -72,7 +73,8 @@ struct VoltageControlledOscillator {
                 fclose(wave_f);
             }
             else{
-                j--;
+                j=0;
+
             }
         }
         tab_loaded = true;

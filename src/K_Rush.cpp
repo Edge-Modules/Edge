@@ -40,6 +40,7 @@ struct Diode{
         for(int j=0; j<64; j++){
             string file_name = plug_directory+wavefiles[j];
             const char *c = file_name.c_str();
+            wave_f = NULL;
             wave_f = fopen(c,"r");
             if(wave_f!=NULL){
                 fseek(wave_f,44,SEEK_SET);
@@ -51,7 +52,7 @@ struct Diode{
             }
             else{
                 j=0;
-                fclose(wave_f);
+
             }
         }
         tab_loaded = true;
@@ -176,7 +177,7 @@ struct Diode{
 
 */
 
-            index =  abs_in*64;
+            index =  abs_in*16;
 
             while(index>=255){
                 index-= 255;
@@ -190,14 +191,15 @@ struct Diode{
 
             //Ov_Buffer[i] =  Ov_Buffer[i]-((gain-1)*interpolateLinear(wave[type],index));
             //if (abs_in>1.0f)
-            abs_in -= (clamp((gain-1),0.0f,7.0f)/4)* ((interpolateLinear(wave[type],index)+0.5f));
+            if(abs_in!=0.0f)
+                abs_in -= clamp((gain-1.0f),0.0f,8.0f)*clamp(abs_in* ((interpolateLinear(wave[type],index))),0.0f,4.0f);
 
             if(phase_in>0.0f)
                 Ov_Buffer[i] = phase_in*abs_in;
             else
                 Ov_Buffer[i] = phase_in*(abs_in);
 
-            filter1.process(Ov_Buffer[i]*gain);
+            filter1.process(Ov_Buffer[i]);
             Ov_Buffer[i]=filter1.lowpass();
 
         }
@@ -401,7 +403,7 @@ struct K_RushWidget : ModuleWidget {
 
         addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(56.4, 83.2), module, K_Rush::BLEND_PARAM, 0.0f, 1.0f, 0.0f));
 		addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(12.2, 158.7), module, K_Rush::GAIN_PARAM, 0.0f, 8.0f, 1.0f));
-		addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(100, 256.7), module, K_Rush::FEEDBACK_PARAM, 0.0f, 1.0f, 0.0f));
+		addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(100, 256.7), module, K_Rush::FEEDBACK_PARAM, 0.0f, 0.25f, 0.0f));
 
 		addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(106.9, 165.8), module, K_Rush::CV_GAIN_PARAM, -1.0f, 1.0f, 0.0f));
 		addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(19.3, 263.8), module, K_Rush::CV_FEEDBACK_PARAM, 0.0f, 0.3f, 0.0f));
