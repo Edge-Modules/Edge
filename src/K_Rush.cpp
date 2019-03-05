@@ -178,6 +178,7 @@ struct Diode{
 */
 
             index =  abs_in*16;
+            clamp(index,0.0f,255.0f);
 
             while(index>=255){
                 index-= 255;
@@ -192,7 +193,7 @@ struct Diode{
             //Ov_Buffer[i] =  Ov_Buffer[i]-((gain-1)*interpolateLinear(wave[type],index));
             //if (abs_in>1.0f)
             if(abs_in!=0.0f)
-                abs_in -= clamp((gain-1.0f),0.0f,8.0f)*clamp(abs_in* ((interpolateLinear(wave[type],index))),0.0f,4.0f);
+                abs_in -= (clamp((gain-1.0f),0.0f,8.0f)/2)*clamp(abs_in* ((interpolateLinear(wave[type],index))),0.0f,4.0f);
 
             if(phase_in>0.0f)
                 Ov_Buffer[i] = phase_in*abs_in;
@@ -217,9 +218,11 @@ struct Diode{
 
 struct K_Rush : Module {
 	enum ParamIds {
+	    TRIM_PARAM,
+	    MIX_PARAM,
 		FEEDBACK_PARAM,
 		GAIN_PARAM,
-		BLEND_PARAM,
+		WAVET_PARAM,
 		CV_GAIN_PARAM,
 		CV_FEEDBACK_PARAM,
 		NUM_PARAMS
@@ -285,7 +288,7 @@ void K_Rush::step() {
 
     float feed_back = (params[FEEDBACK_PARAM].value + (params[CV_FEEDBACK_PARAM].value*inputs[CV_FEEDBACK_INPUT].value))*(inputs[FEEDBACK_INPUT].value/5.0f);
     //float in = (inputs[IN_INPUT].value/5.0f)-((inputs[FEEDBACK_INPUT].value/5.0f)/clamp(16/gain,1.0f,16.0f) *feed_back);
-    float in = inputs[IN_INPUT].value/5.0;
+    float in = (inputs[IN_INPUT].value/5.0)*params[TRIM_PARAM].value;
 
     if(inputs[CV_GAIN_INPUT].active)
         gain += (inputs[CV_GAIN_INPUT].value*params[CV_GAIN_PARAM].value);
@@ -347,9 +350,9 @@ void K_Rush::step() {
     //in = Decimate.process(Ov_Buffer);
     //in = clamp(in,-5.0f,5.0f);
 */
-    int type_diode = int(params[BLEND_PARAM].value *16);
+    int type_diode = params[WAVET_PARAM].value;
     in = d_pos.proc_f_d1(in ,gain,type_diode,feed_back);
-    outputs[OUT_OUTPUT].value = in*5;
+    outputs[OUT_OUTPUT].value = (params[MIX_PARAM].value*in*5)+((1-params[MIX_PARAM].value)*inputs[IN_INPUT].value);
     outputs[FEEDBACK_OUTPUT].value = in*5;
 /*
     //float out = in;
@@ -401,11 +404,14 @@ struct K_RushWidget : ModuleWidget {
 	K_RushWidget(K_Rush *module) : ModuleWidget(module) {
 		setPanel(SVG::load(assetPlugin(plugin, "res/K_Rush.svg")));
 
-        addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(56.4, 83.2), module, K_Rush::BLEND_PARAM, 0.0f, 1.0f, 0.0f));
+		addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(15.2, 85.5), module, K_Rush::TRIM_PARAM, -4.0f, 4.0f, 1.0f));
+        addParam(ParamWidget::create<RoundBlackSnapKnob>(Vec(60.5, 82.8), module, K_Rush::WAVET_PARAM, 0.0f, 15.0f, 0.0f));
+        addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(110.9, 85.5), module, K_Rush::MIX_PARAM, 0.0f, 1.0f, 1.0f));
+
 		addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(12.2, 158.7), module, K_Rush::GAIN_PARAM, 0.0f, 8.0f, 1.0f));
 		addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(100, 256.7), module, K_Rush::FEEDBACK_PARAM, 0.0f, 0.25f, 0.0f));
 
-		addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(106.9, 165.8), module, K_Rush::CV_GAIN_PARAM, -1.0f, 1.0f, 0.0f));
+		addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(106.9, 165.7), module, K_Rush::CV_GAIN_PARAM, -1.0f, 1.0f, 0.0f));
 		addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(19.3, 263.8), module, K_Rush::CV_FEEDBACK_PARAM, 0.0f, 0.3f, 0.0f));
 
 		addInput(Port::create<PJ301MPort>(Vec(62.3, 205), Port::INPUT, module, K_Rush::CV_GAIN_INPUT));
