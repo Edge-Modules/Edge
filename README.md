@@ -15,6 +15,7 @@ K_Rush n'est pas fait pour la rondeur même si cela doit être possible avec des
 WCO Osc
 
 Oscillateur inspiré du WTF VCO de Dove Audio (http://dove-audio.com/wtf-module/).
+
 Ajout d'un mode LFO et du Sync.
 
 ![Screenshot of WCO](res/WCO_preview.jpg)
