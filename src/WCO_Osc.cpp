@@ -176,7 +176,7 @@ struct VoltageControlledOscillator {
 
 	void process(float deltaTime, float syncValue) {
 
-		float deltaPhaseOver = clamp(freq * deltaTime, 1e-6, 0.5f)*(1.0f / OVERSAMPLE);
+		float deltaPhase = clamp(freq * deltaTime, 1e-6, 0.5f);
 
 		// Detect sync
 		int syncIndex = -1; // Index in the oversample loop where sync occurs [0, OVERSAMPLE)
@@ -192,11 +192,18 @@ struct VoltageControlledOscillator {
 			}
 			lastSyncValue = syncValue;
 		}
-		//sqrFilter.setCutoff(40.0f * deltaTime);
-		//float i_phase = phase*255;
 
-        //for(int i= 0; i<=255; i++){
-        int i = int(phase*255);
+		if (syncDirection)
+			deltaPhase *= -1.0f;
+
+
+
+
+        int i = int(phase*255)+3;
+        if(i>=255.0f){
+            i -= 255.0f;
+        }
+
             if(invert){
                if(_dual < 0.5f){
                     if( (phase > al_window and phase < ar_window) or (al_window == 0.0f) ) {
@@ -295,26 +302,21 @@ struct VoltageControlledOscillator {
             }
         //}
 
-        sqrFilter.setCutoff(44100.0f * (deltaTime/OVERSAMPLE));
-        mid_phase=phase +0.03f;
-        while (mid_phase > 1.0f) {
-            mid_phase -= 1.0f;
-        }
-        while (mid_phase < 0) {
-            mid_phase += 1.0f;
-        }
+        sqrFilter.setCutoff(44100.0f * deltaTime);
 
-        clamp(mid_phase,0.0f,1.0f);
+
+
+
         for (int i = 0; i < OVERSAMPLE; i++) {
             if (syncIndex == i) {
 					phase = 0.0f;
 			}
+
 			// Advance phase
-            sinBuffer[i]=1.66f * interpolateLinear(buf_final, mid_phase*255.0f) ;
+            sinBuffer[i]=1.66f * interpolateLinear(buf_final, phase*255.0f) ;
             sqrFilter.process(sinBuffer[i]);
             sinBuffer[i]=sqrFilter.lowpass();
-            phase += deltaPhaseOver;
-            mid_phase += deltaPhaseOver;
+            phase += deltaPhase / OVERSAMPLE;
 			while (phase > 1.0f) {
                 phase -= 1.0f;
             }
