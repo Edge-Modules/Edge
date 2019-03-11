@@ -16,6 +16,9 @@ WCO Osc
 
 Oscillateur inspiré du WTF VCO de Dove Audio (http://dove-audio.com/wtf-module/).
 
+Les WaveTable ont été crées avec WaveEdit ( http://synthtech.com/waveedit/ ).
+Il est donc possible d'incorporer ses propres tables ( les wavs se situent dans 'res/waves').
+
 Ajout d'un mode LFO et du Sync.
 
 ![Screenshot of WCO](res/WCO_preview.jpg)
