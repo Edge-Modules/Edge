@@ -101,10 +101,11 @@ struct VoltageControlledOscillator {
 		// Note C4
 		freq = 261.626f * powf(2.0f, pitch / 12.0f);
 
-		freq = clamp(freq,1.0f,12000.0f);
+        freq = clamp(freq,1.0f,10000.0f);
         if(_lfo_param == 0){
           freq = freq/100;
 		}
+
 
 	}
 
@@ -303,7 +304,7 @@ struct VoltageControlledOscillator {
             mid_phase += 1.0f;
         }
 
-
+        clamp(mid_phase,0.0f,1.0f);
         for (int i = 0; i < OVERSAMPLE; i++) {
             if (syncIndex == i) {
 					phase = 0.0f;
