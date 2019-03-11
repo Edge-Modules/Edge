@@ -103,6 +103,7 @@ struct VoltageControlledOscillator {
 		if(_lfo_param == 0){
           freq = freq/100;
 		}
+		freq = clamp(freq,1.0f,12000.0f);
 
 
 	}
