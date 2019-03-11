@@ -99,14 +99,11 @@ struct VoltageControlledOscillator {
 		//}
 		pitch += pitchCv;
 		// Note C4
-		if(_lfo_param == 1){
-          freq = 261.626f * powf(2.0f, pitch / 12.0f);
-          freq = clamp(freq,1.0f,10000.0f);
+		freq = 261.626f * powf(2.0f, pitch / 12.0f);
+		if(_lfo_param == 0){
+          freq = freq/100;
 		}
-		else{
-            pitch = fminf(pitch, 10.0f);
-            freq = powf(2.0f, pitch);
-		}
+
 
 	}
 
@@ -175,7 +172,7 @@ struct VoltageControlledOscillator {
   	}
 
 
-	void process(float deltaTime, float syncValue, float mode) {
+	void process(float deltaTime, float syncValue) {
 
 		float deltaPhaseOver = clamp(freq * deltaTime, 1e-6, 0.5f)*(1.0f / OVERSAMPLE);
 
@@ -357,6 +354,7 @@ struct WCO_Osc : Module {
 	};
 	enum InputIds {
 	    FM_INPUT,
+	    SYNK_INPUT,
 		PITCH_INPUT,
 		FRONT_INPUT,
 		WIDTH_INPUT,
@@ -405,12 +403,17 @@ void WCO_Osc::step() {
     }
 	float pitchFine = 3.0f * quadraticBipolar(params[FINE_PARAM].value);
 	float pitchCv = 12.0f * inputs[PITCH_INPUT].value;
-	if ((inputs[FM_INPUT].active || inputs[FM_INPUT].value != l_FM_INPUT )&& params[LFO_NOISE_PARAM].value != 0 ) {
+	if (inputs[FM_INPUT].active || inputs[FM_INPUT].value != l_FM_INPUT ) {
 		pitchCv += quadraticBipolar(params[FM_PARAM].value) * 12.0f * inputs[FM_INPUT].value;
 	}
 	oscillator.setPitch(params[FREQ_PARAM].value, pitchFine + pitchCv,params[LFO_NOISE_PARAM].value);
 	oscillator.setPulseWidth(0.5f);//oscillator.setPulseWidth(params[PW_PARAM].value + params[WIDTH_PARAM].value * inputs[PW_INPUT].value / 10.0f);
-	oscillator.syncEnabled = !params[LFO_NOISE_PARAM].value;
+	if(inputs[SYNK_INPUT].active)
+        oscillator.syncEnabled = 1;
+    else
+        oscillator.syncEnabled = 0;
+
+
     oscillator.setInvert(params[INVERT_PARAM].value);
 
 
@@ -421,12 +424,8 @@ void WCO_Osc::step() {
     if( ( params[FRONT_PARAM].value != l_FRONT_PARAM ) || (params[CV_FRONT_PARAM].value != l_CV_FRONT_PARAM ) || (inputs[FRONT_INPUT].value != l_FRONT_INPUT) || ( params[REAR_PARAM].value != l_REAR_PARAM ) || (params[CV_REAR_PARAM].value != l_CV_REAR_PARAM ) || (inputs[REAR_INPUT].value != l_REAR_INPUT) || oscillator.tab_loaded == false ){
         oscillator.setWaves( params[FRONT_PARAM].value+(params[CV_FRONT_PARAM].value*(inputs[FRONT_INPUT].value/10)),params[REAR_PARAM].value+(params[CV_REAR_PARAM].value*(inputs[REAR_INPUT].value/10)));
 	}
-	if(params[LFO_NOISE_PARAM].value == 0 ){
-        oscillator.process(engineGetSampleTime(), inputs[FM_INPUT].value,1);
-	}
-	else{
-        oscillator.process(engineGetSampleTime(),0.0f,0);
-	}
+
+    oscillator.process(engineGetSampleTime(), inputs[SYNK_INPUT].value);
 
 	// Set output
 	if (outputs[OUTPUT].active)
@@ -652,17 +651,18 @@ WCO_OscWidget::WCO_OscWidget(WCO_Osc *module) : ModuleWidget(module) {
 
 
     addParam(ParamWidget::create<EdgeRedKnob>(Vec(14.8, 211.8), module, WCO_Osc::FRONT_PARAM, 0.0f, 1.0f, 0.0f));
-	addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(56.5, 199.5), module, WCO_Osc::WIDTH_PARAM, 0.0f, 1.0f, 0.0f));
+	addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(56.5, 187.3), module, WCO_Osc::WIDTH_PARAM, 0.0f, 1.0f, 0.0f));
 	addParam(ParamWidget::create<EdgeBlueKnob>(Vec(108, 211.8), module, WCO_Osc::REAR_PARAM, 0.0f, 1.0f, 0.0f));
 	addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(17.7, 255), module, WCO_Osc::CV_FRONT_PARAM, 0.0f, 1.0f, 0.0f));
 	addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(63.5, 248.5), module, WCO_Osc::CV_WIDTH_PARAM, 0.0f, 1.0f, 0.0f));
 	addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(110.6, 254.8), module, WCO_Osc::CV_REAR_PARAM, 0.0f, 1.0f, 0.0f));
     addParam(ParamWidget::create<RoundBlackKnob>(Vec(37.5, 101), module, WCO_Osc::FREQ_PARAM, -54.0f, 54.0f, 0.0f));
     addParam(ParamWidget::create<RoundBlackKnob>(Vec(84.5, 101), module, WCO_Osc::FINE_PARAM, -1.0f, 1.0f, 0.0f));
-	addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(87.5, 151.5), module, WCO_Osc::FM_PARAM, 0.0f, 1.0f, 0.0f));
+	addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(63.5, 154.1), module, WCO_Osc::FM_PARAM, 0.0f, 1.0f, 0.0f));
 
 
-	addInput(Port::create<PJ301MPort>(Vec(39.5, 151.5), Port::INPUT, module, WCO_Osc::FM_INPUT));
+	addInput(Port::create<PJ301MPort>(Vec(30.5, 154.3), Port::INPUT, module, WCO_Osc::FM_INPUT));
+	addInput(Port::create<PJ301MPort>(Vec(95.5, 154.3), Port::INPUT, module, WCO_Osc::SYNK_INPUT));
 	addOutput(Port::create<PJ301MPort>(Vec(110.5, 328), Port::OUTPUT, module, WCO_Osc::OUTPUT));
 	addInput(Port::create<PJ301MPort>(Vec(17.5, 328), Port::INPUT, module, WCO_Osc::PITCH_INPUT));
     addInput(Port::create<PJ301MPort>(Vec(17.5, 300), Port::INPUT, module, WCO_Osc::FRONT_INPUT));

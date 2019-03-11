@@ -13,10 +13,6 @@
 using namespace std;
 
 
-inline float clip(float x) {
-	return tanhf(x);
-}
-
 /**Diode -> in  -1V / +1V **/
 struct Diode{
     float offset,limit1,limit2,phase_in, phase_out = 0.0f;
@@ -193,7 +189,7 @@ struct Diode{
             //Ov_Buffer[i] =  Ov_Buffer[i]-((gain-1)*interpolateLinear(wave[type],index));
             //if (abs_in>1.0f)
             if(abs_in!=0.0f)
-                abs_in -= (clamp((gain-1.0f),0.0f,8.0f)/2)*clamp(abs_in* ((interpolateLinear(wave[type],index))),0.0f,4.0f);
+                abs_in -= (clamp((gain-1.0f),0.0f,8.0f))*clamp(abs_in* ((interpolateLinear(wave[type],index)+0.5f)),0.0f,4.0f);
 
             if(phase_in>0.0f)
                 Ov_Buffer[i] = phase_in*abs_in;
