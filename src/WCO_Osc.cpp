@@ -100,11 +100,11 @@ struct VoltageControlledOscillator {
 		pitch += pitchCv;
 		// Note C4
 		freq = 261.626f * powf(2.0f, pitch / 12.0f);
-		if(_lfo_param == 0){
+
+		freq = clamp(freq,1.0f,12000.0f);
+        if(_lfo_param == 0){
           freq = freq/100;
 		}
-		freq = clamp(freq,1.0f,12000.0f);
-
 
 	}
 
