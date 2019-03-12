@@ -29,6 +29,7 @@ struct Diode{
     FILE * wave_f = NULL;
 	short temp_buf[256]={0};
     bool tab_loaded = false;
+    float out = 0.0f;
 
 
     void LoadWaves(){
@@ -63,87 +64,8 @@ struct Diode{
         }
 
 
-       // in *= gain;
-        //float weight = 0.0f;
-
-
-        //weight = abs(d_memory[0] - d_memory[1]);
-
-
-
-
-        //phase_out = phase_in;
-       // weight_accum += weight* phase_in;
-/*
-        if(weight_accum > 1.0f){
-            weight_accum = d_memory[0]-weight*-1;
-
-        }
-        if(weight_accum < -1.0f){
-            weight_accum = d_memory[0]+weight*-1;
-        }
-
-
-*/
-
-        //weight_accum = clamp(weight_accum,-1.0f,1.0f);
-
-
-
-
-        //weight = clamp( weight, -0.1, 0.1);
-
-       //  float out = weight_accum;
-
-       // float out = d_memory[1] + (weight*phase);
-
-/*
-        float phase,weight = 0.0f;
-        d_memory[1] = d_memory[0];
-        d_memory[0] = in;
-
-        if(d_memory[0] > d_memory[1]){
-            phase = 1.0f;
-            weight = d_memory[0] - d_memory[1];
-        }
-        else{
-                if(d_memory[0] == d_memory[1]){
-                    phase = 0.0f;
-                    weight = 0.0f;
-                }
-                else{
-                    phase = -1.0f;
-                    weight = d_memory[1] - d_memory[0];
-                }
-        }
-*/
-/*
-        if(weight > 0.008)
-            phase = -phase;
-*/
-        //float temp=in;
-
-        /**-> 0 � +1 **/
-
-        //if(in<0)
-          //  in=in*-1;
-        //in = -1*pow(in*gain,2)+1;
-
-
-       /**WAVEFOLD**/
-        //if(in >= 1.0f)
-        //    in = 1+(1-in);
-        //if(in <= -1.0f)
-        //    in = -1-(in+1);
-
-
-        //in = sgn(temp)*in;
-
-        //float out = (d_memory[1]+weight)*phase;
-
-
-        //out=tanh(gain*out);
         in-=feedback;
+        float last_dif = (out-in)/16;
         Upsample.process(in,Ov_Buffer);
         filter1.setCutoff((44100 * (engineGetSampleTime()/16)));
         float index = 0.0f;
@@ -151,6 +73,7 @@ struct Diode{
 
 
         for(int i = 0 ; i< 16 ; i++){
+
 
 
             if (Ov_Buffer[i]<0)
@@ -162,19 +85,8 @@ struct Diode{
             float abs_in = abs(Ov_Buffer[i]*gain);
 
 
-/*
+            index =  abs_in*32+(last_dif*i);
 
-            if(abs_in>1.0f){
-                abs_in += 2*(1-abs_in);
-            }
-            if(abs_in<0.0f){
-                abs_in -= 2*abs_in;
-            }
-
-*/
-
-            index =  abs_in*16;
-            clamp(index,0.0f,255.0f);
 
             while(index>=255){
                 index-= 255;
@@ -184,12 +96,10 @@ struct Diode{
                 index+= 255;
             }
 
+             clamp(index,0.0f,255.0f);
 
-
-            //Ov_Buffer[i] =  Ov_Buffer[i]-((gain-1)*interpolateLinear(wave[type],index));
-            //if (abs_in>1.0f)
             if(abs_in!=0.0f)
-                abs_in -= (clamp((gain-1.0f),0.0f,8.0f))*clamp(abs_in* ((interpolateLinear(wave[type],index)+0.5f)),0.0f,4.0f);
+                abs_in -= (clamp((gain-1.0f),0.0f,8.0f)/2)*clamp(abs_in* ((interpolateLinear(wave[type],index)+0.5f)),0.0f,4.0f);
 
             if(phase_in>0.0f)
                 Ov_Buffer[i] = phase_in*abs_in;
@@ -201,7 +111,7 @@ struct Diode{
 
         }
         in=Decimate.process(Ov_Buffer);//*phase_in;
-        float out = clamp(in,-1.0f,1.0f);
+        out = clamp(in,-1.0f,1.0f);
         return out ;
 
 
@@ -405,7 +315,7 @@ struct K_RushWidget : ModuleWidget {
         addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(110.9, 85.5), module, K_Rush::MIX_PARAM, 0.0f, 1.0f, 1.0f));
 
 		addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(12.2, 158.7), module, K_Rush::GAIN_PARAM, 0.0f, 8.0f, 1.0f));
-		addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(100, 256.7), module, K_Rush::FEEDBACK_PARAM, 0.0f, 0.25f, 0.0f));
+		addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(100, 256.7), module, K_Rush::FEEDBACK_PARAM, 0.0f, 1.0f, 0.0f));
 
 		addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(106.9, 165.7), module, K_Rush::CV_GAIN_PARAM, -1.0f, 1.0f, 0.0f));
 		addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(19.3, 263.8), module, K_Rush::CV_FEEDBACK_PARAM, 0.0f, 0.3f, 0.0f));
