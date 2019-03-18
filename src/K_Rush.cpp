@@ -15,8 +15,7 @@ using namespace std;
 
 /**Diode -> in  -1V / +1V **/
 struct Diode{
-    float offset,limit1,limit2,phase_in, phase_out = 0.0f;
-    float weight_accum = 0;
+    float phase_in, phase_out = 0.0f;
     Upsampler<16,16> Upsample;
     Decimator<16,16> Decimate;
     float Ov_Buffer[16] = {0};
@@ -26,10 +25,11 @@ struct Diode{
     string plug_directory = assetPlugin(plugin, "res/waves2/");
 	float wave[64][256]={{0}};
     const string wavefiles[64]={"00.wav","01.wav","02.wav","03.wav","04.wav","05.wav","06.wav","07.wav","08.wav","09.wav","10.wav","11.wav","12.wav","13.wav","14.wav","15.wav","16.wav","17.wav","18.wav","19.wav","20.wav","21.wav","22.wav","23.wav","24.wav","25.wav","26.wav","27.wav","28.wav","29.wav","30.wav","31.wav","32.wav","33.wav","34.wav","35.wav","36.wav","37.wav","38.wav","39.wav","40.wav","41.wav","42.wav","43.wav","44.wav","45.wav","46.wav","47.wav","48.wav","49.wav","50.wav","51.wav","52.wav","53.wav","54.wav","55.wav","56.wav","57.wav","58.wav","59.wav","60.wav","61.wav","62.wav","63.wav"};
-    FILE * wave_f = NULL;
+    FILE *wave_f = NULL;
 	short temp_buf[256]={0};
     bool tab_loaded = false;
     float out = 0.0f;
+
 
 
     void LoadWaves(){
@@ -64,8 +64,9 @@ struct Diode{
         }
 
 
-        in-=feedback;
-        float last_dif = (out-in)/16;
+
+        float last_dif = clamp((out-in)/16.0f,0.0f,1.0f);
+        in=(in-(feedback*(gain/8.0f)));
         Upsample.process(in,Ov_Buffer);
         filter1.setCutoff((44100 * (engineGetSampleTime()/16)));
         float index = 0.0f;
@@ -82,24 +83,21 @@ struct Diode{
                 phase_in = 1.0f;
 
 
-            float abs_in = abs(Ov_Buffer[i]*gain);
+            float abs_in = abs(Ov_Buffer[i]);
 
 
-            index =  abs_in*32+(last_dif*i);
+            index =  tanh(abs_in)*255;
+            //clamp(index,0.0f,255.0f);
 
 
-            while(index>=255){
-                index-= 255;
-            }
+            clamp(index,0.0f,255.0f);
 
-             while(index<=0){
-                index+= 255;
-            }
 
-             clamp(index,0.0f,255.0f);
+            abs_in *= 1- (clamp((gain-1),0.0f,8.0f)*interpolateLinear(wave[type],index)+0.5f);
 
-            if(abs_in!=0.0f)
-                abs_in -= (clamp((gain-1.0f),0.0f,8.0f)/2)*clamp(abs_in* ((interpolateLinear(wave[type],index)+0.5f)),0.0f,4.0f);
+
+
+            abs_in *= gain;
 
             if(phase_in>0.0f)
                 Ov_Buffer[i] = phase_in*abs_in;
@@ -110,7 +108,7 @@ struct Diode{
             Ov_Buffer[i]=filter1.lowpass();
 
         }
-        in=Decimate.process(Ov_Buffer);//*phase_in;
+        in=Decimate.process(Ov_Buffer)*2.0f;//*phase_in;
         out = clamp(in,-1.0f,1.0f);
         return out ;
 
@@ -192,7 +190,7 @@ void K_Rush::step() {
     float gain = params[GAIN_PARAM].value;
 
 
-    float feed_back = (params[FEEDBACK_PARAM].value + (params[CV_FEEDBACK_PARAM].value*inputs[CV_FEEDBACK_INPUT].value))*(inputs[FEEDBACK_INPUT].value/5.0f);
+    float feed_back = clamp((params[FEEDBACK_PARAM].value + (params[CV_FEEDBACK_PARAM].value*inputs[CV_FEEDBACK_INPUT].value)),0.0f,1.0f)*(inputs[FEEDBACK_INPUT].value/5.0f);
     //float in = (inputs[IN_INPUT].value/5.0f)-((inputs[FEEDBACK_INPUT].value/5.0f)/clamp(16/gain,1.0f,16.0f) *feed_back);
     float in = (inputs[IN_INPUT].value/5.0)*params[TRIM_PARAM].value;
 
@@ -201,106 +199,12 @@ void K_Rush::step() {
 
     gain = clamp(gain,0.0f,8.0f);
 
-
-    /*****WAvefolder chelou (1 seule rebond en haut / infini en bas
-
-    if(in >= 1.0f)
-        in = 1+(1-in);
-    if(in <= -1.0f)
-        in = -1-(in+1);
-    ***/
-
-    /***HARDCLIPPER
-    if(in >= 1.0f)
-        in+=(1-in);
-    if(in <= -1.0f)
-        in-=(1+in);
-    *****/
-
-    //Upsample.process(in,Ov_Buffer);
-
-    /**** SQUAREWAVE Le signal;
-    in = sgn(in)*(in+(1-in));
-    ****/
-
-    //d_pos.offset=-2.0f;
-    /***   Offset et HardClip    ***/
-
-    //in = in+d_pos.offset+d_neg.offset;
-
-
-
-
-/***Fonction Diode+ Diode- */
-
-    //in=gain*in;
-
-
-   // in = d_pos.proc_f_d1(in ,gain,1);
-
-
-    /*
-
-    filter1.setCutoff(40 / (engineGetSampleTime()/16));
-    for(int i = 0 ; i< 16 ; i++){
-        Ov_Buffer[i] = d_pos.proc_f_d1(Ov_Buffer[i] ,gain,1);
-        filter1.process(Ov_Buffer[i]);
-        Ov_Buffer[i]=filter1.lowpass();
-    }
-
-
-    // DECIMATION !
-     in=Decimate.process(Ov_Buffer);
-
-
-    //in = Decimate.process(Ov_Buffer);
-    //in = clamp(in,-5.0f,5.0f);
-*/
     int type_diode = params[WAVET_PARAM].value;
+
     in = d_pos.proc_f_d1(in ,gain,type_diode,feed_back);
+
     outputs[OUT_OUTPUT].value = (params[MIX_PARAM].value*in*5)+((1-params[MIX_PARAM].value)*inputs[IN_INPUT].value);
     outputs[FEEDBACK_OUTPUT].value = in*5;
-/*
-    //float out = in;
-
-    //outputs[OUT_OUTPUT].value = out;
-
-
-// DIODE
-
-    float result = 0.0f;
-    float feedback = params[FEEDBACK_PARAM].value;
-
-
-    //float in =inputs[IN_INPUT].value/5.0f;
-    buff[0]=in;
-    for(int i = 905 ; i >= 0 ; i--){
-        buff[i+1]=buff[i];
-    }
-
-    if(inputs[FEEDBACK_INPUT].active){
-        in += feedback*inputs[FEEDBACK_INPUT].value/5;
-    }
-    else{
-        in += feedback*buff[280]/2;
-    }
-    in*=gain;
-    in = tanh(in);
-    const float theta = sgn(in);
-
-    Upsample.process(in,Ov_Buffer);
-
-    for (int i = 0; i < 2; i++) {
-        Ov_Buffer[i] =  m_alpha*Ov_Buffer[i] - (theta * m_thermalVoltage * LambertW(m_delta * exp(theta * m_beta * Ov_Buffer[i])));
-    }
-    result = Decimate.process(Ov_Buffer);
-    result = m_alpha*in - (theta * m_thermalVoltage * LambertW(m_delta * exp(theta * m_beta * in))) ;
-    outputs[OUT_OUTPUT].value = tanh(result)*20;
-    outputs[FEEDBACK_OUTPUT].value = tanh(result)*20;
-
-    last_step = tanh(result);
-
-*///////////////////////////////////////
 
 
 }
