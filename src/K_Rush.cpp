@@ -57,19 +57,20 @@ struct Diode{
 
 
 
-    float proc_f_d1(float in, float gain, int type,float feedback){
+    float proc_f_d1(float in, float gain, float type,float feedback){
 
         if(tab_loaded == false){
             LoadWaves();
         }
 
 
-        float last_dif = clamp((out-in)/16.0f,0.0f,1.0f);
+
         in=(in-(feedback*(gain/8.0f)));
         Upsample.process(in,Ov_Buffer);
-        filter1.setCutoff((44100 * (engineGetSampleTime()/16)));
+        filter1.setCutoff((44100 * (engineGetSampleTime()/4)));
         float index = 0.0f;
 
+        type = clamp(type, 0.00f,14.99f);
 
         //OVRS
         for(int i = 0 ; i< 4 ; i++){
@@ -87,11 +88,23 @@ struct Diode{
             //clamp(index,0.0f,255.0f);
 
 
-            clamp(index,0.0f,255.0f);
+            clamp(index,0.01f,255.0f);
 
 
-            abs_in *= 1- (clamp((gain-1),0.0f,8.0f)*interpolateLinear(wave[type],index)+0.5f);
+            float coef1f, coef2f = 0.0f;
+            float interp_l = 0.0f;
+            if( (int)type > type ){
+                coef1f = (int) type - type;
+                coef2f = 1 - coef1f;
+            }
+            else{
+                coef2f = type - (int) type;
+                coef1f = 1 - coef2f;
+            }
+            interp_l+= interpolateLinear(wave[(int)type],index)*coef1f;
+            interp_l+= interpolateLinear(wave[(int)type+1],index)*coef2f;
 
+            abs_in *= 1- (clamp((gain-1),0.0f,8.0f)*(interp_l+0.5f));
 
 
             abs_in *= gain;
@@ -105,7 +118,7 @@ struct Diode{
             Ov_Buffer[i]=filter1.lowpass();
 
         }
-        in=Decimate.process(Ov_Buffer)*2.0f;//*phase_in;
+        in=Decimate.process(Ov_Buffer);//*phase_in;
         out = clamp(in,-1.0f,1.0f);
         return out ;
 
@@ -129,6 +142,7 @@ struct K_Rush : Module {
 		NUM_PARAMS
 	};
 	enum InputIds {
+	    TYPE_INPUT,
 		CV_GAIN_INPUT,
 		IN_INPUT,
 		CV_FEEDBACK_INPUT,
@@ -194,7 +208,7 @@ void K_Rush::step() {
         gain += (inputs[CV_GAIN_INPUT].value*params[CV_GAIN_PARAM].value);
 
     gain = clamp(gain,0.0f,8.0f);
-    int type_diode = params[WAVET_PARAM].value;
+    float type_diode = params[WAVET_PARAM].value+(inputs[TYPE_INPUT].value * 2.0f);
     in = d_pos.proc_f_d1(in ,gain,type_diode,feed_back);
     outputs[OUT_OUTPUT].value = (params[MIX_PARAM].value*in*5)+((1-params[MIX_PARAM].value)*inputs[IN_INPUT].value);
     outputs[FEEDBACK_OUTPUT].value = in*5;
@@ -208,7 +222,7 @@ struct K_RushWidget : ModuleWidget {
 		setPanel(SVG::load(assetPlugin(plugin, "res/K_Rush.svg")));
 
 		addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(15.2, 85.5), module, K_Rush::TRIM_PARAM, -4.0f, 4.0f, 1.0f));
-        addParam(ParamWidget::create<RoundBlackSnapKnob>(Vec(60.5, 82.8), module, K_Rush::WAVET_PARAM, 0.0f, 15.0f, 0.0f));
+        addParam(ParamWidget::create<RoundBlackKnob>(Vec(60.5, 82.8), module, K_Rush::WAVET_PARAM, 0.0f, 15.0f, 0.0f));
         addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(110.9, 85.5), module, K_Rush::MIX_PARAM, 0.0f, 1.0f, 1.0f));
 
 		addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(12.2, 158.7), module, K_Rush::GAIN_PARAM, 0.0f, 8.0f, 1.0f));
@@ -217,6 +231,7 @@ struct K_RushWidget : ModuleWidget {
 		addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(106.9, 165.7), module, K_Rush::CV_GAIN_PARAM, -1.0f, 1.0f, 0.0f));
 		addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(19.3, 263.8), module, K_Rush::CV_FEEDBACK_PARAM, 0.0f, 0.3f, 0.0f));
 
+        addInput(Port::create<PJ301MPort>(Vec(62.3, 125), Port::INPUT, module, K_Rush::TYPE_INPUT));
 		addInput(Port::create<PJ301MPort>(Vec(62.3, 205), Port::INPUT, module, K_Rush::CV_GAIN_INPUT));
         addInput(Port::create<PJ301MPort>(Vec(62.3, 302.6), Port::INPUT, module, K_Rush::CV_FEEDBACK_INPUT));
 
