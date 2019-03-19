@@ -9,6 +9,7 @@
 
 
 
+
 using namespace std;
 
 
@@ -432,8 +433,16 @@ void WCO_Osc::step() {
     oscillator.process(engineGetSampleTime(), inputs[SYNK_INPUT].value);
 
 	// Set output
-	if (outputs[OUTPUT].active)
-		outputs[OUTPUT].value = clamp ((5.0f * oscillator.sin()),-5.0f,5.0f);
+	if (outputs[OUTPUT].active){
+        if(params[LFO_NOISE_PARAM].value == 1){
+            outputs[OUTPUT].value = clamp ((5.0f * oscillator.sin()),-5.0f,5.0f);
+        }
+        else{
+            outputs[OUTPUT].value = clamp (2.5f*(oscillator.sin()+1.0f),0.0f,5.0f);
+        }
+
+
+	}
 
 
     l_FRONT_PARAM = params[FRONT_PARAM].value;
