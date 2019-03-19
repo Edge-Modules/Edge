@@ -16,8 +16,8 @@ using namespace std;
 /**Diode -> in  -1V / +1V **/
 struct Diode{
     float phase_in, phase_out = 0.0f;
-    Upsampler<16,16> Upsample;
-    Decimator<16,16> Decimate;
+    Upsampler<4,16> Upsample;
+    Decimator<4,16> Decimate;
     float Ov_Buffer[16] = {0};
 
     RCFilter filter1;
@@ -64,7 +64,6 @@ struct Diode{
         }
 
 
-
         float last_dif = clamp((out-in)/16.0f,0.0f,1.0f);
         in=(in-(feedback*(gain/8.0f)));
         Upsample.process(in,Ov_Buffer);
@@ -72,10 +71,8 @@ struct Diode{
         float index = 0.0f;
 
 
-
-        for(int i = 0 ; i< 16 ; i++){
-
-
+        //OVRS
+        for(int i = 0 ; i< 4 ; i++){
 
             if (Ov_Buffer[i]<0)
                 phase_in = -1.0f;
@@ -193,16 +190,12 @@ void K_Rush::step() {
     float feed_back = clamp((params[FEEDBACK_PARAM].value + (params[CV_FEEDBACK_PARAM].value*inputs[CV_FEEDBACK_INPUT].value)),0.0f,1.0f)*(inputs[FEEDBACK_INPUT].value/5.0f);
     //float in = (inputs[IN_INPUT].value/5.0f)-((inputs[FEEDBACK_INPUT].value/5.0f)/clamp(16/gain,1.0f,16.0f) *feed_back);
     float in = (inputs[IN_INPUT].value/5.0)*params[TRIM_PARAM].value;
-
     if(inputs[CV_GAIN_INPUT].active)
         gain += (inputs[CV_GAIN_INPUT].value*params[CV_GAIN_PARAM].value);
 
     gain = clamp(gain,0.0f,8.0f);
-
     int type_diode = params[WAVET_PARAM].value;
-
     in = d_pos.proc_f_d1(in ,gain,type_diode,feed_back);
-
     outputs[OUT_OUTPUT].value = (params[MIX_PARAM].value*in*5)+((1-params[MIX_PARAM].value)*inputs[IN_INPUT].value);
     outputs[FEEDBACK_OUTPUT].value = in*5;
 
