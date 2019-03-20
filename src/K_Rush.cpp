@@ -104,7 +104,7 @@ struct Diode{
             interp_l+= interpolateLinear(wave[(int)type],index)*coef1f;
             interp_l+= interpolateLinear(wave[(int)type+1],index)*coef2f;
 
-            abs_in *= 1- (clamp((gain-1),0.0f,8.0f)*(interp_l+0.5f));
+            abs_in *= 1- ((clamp((gain-1),0.0f,8.0f)*0.3f)*(interp_l+0.5f));
 
 
             abs_in *= gain;
