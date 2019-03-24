@@ -81,11 +81,13 @@ struct Diode{
                 phase_in = 1.0f;
 
 
-            float abs_in = abs(Ov_Buffer[i]);
+            Ov_Buffer[i] = abs(Ov_Buffer[i]);
 
 
-            index =  tanh(abs_in)*255;
-            //clamp(index,0.0f,255.0f);
+            index =  tanh(Ov_Buffer[i])*255;//*clamp(((gain/4.0f)-1.0f),0.0f,2.0f);
+            index= 255.0f-index*2;
+
+            index = abs(index);
 
 
             clamp(index,0.01f,255.0f);
@@ -104,15 +106,15 @@ struct Diode{
             interp_l+= interpolateLinear(wave[(int)type],index)*coef1f;
             interp_l+= interpolateLinear(wave[(int)type+1],index)*coef2f;
 
-            abs_in *= 1- ((clamp((gain-1),0.0f,8.0f)*0.3f)*(interp_l+0.5f));
+            Ov_Buffer[i] *= 1- ((clamp((gain-1),0.0f,8.0f)*0.3f)*(interp_l+0.5f));
 
 
-            abs_in *= gain;
-
+            Ov_Buffer[i] *= (gain*2.0f);
+            Ov_Buffer[i] = tanh(Ov_Buffer[i]);
             if(phase_in>0.0f)
-                Ov_Buffer[i] = phase_in*abs_in;
+                Ov_Buffer[i] = phase_in*Ov_Buffer[i];
             else
-                Ov_Buffer[i] = phase_in*(abs_in);
+                Ov_Buffer[i] = phase_in*(Ov_Buffer[i]);
 
             filter1.process(Ov_Buffer[i]);
             Ov_Buffer[i]=filter1.lowpass();
