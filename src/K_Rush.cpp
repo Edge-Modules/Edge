@@ -106,7 +106,7 @@ struct Diode{
             interp_l+= interpolateLinear(wave[(int)type],index)*coef1f;
             interp_l+= interpolateLinear(wave[(int)type+1],index)*coef2f;
 
-            Ov_Buffer[i] *= 1- ((clamp((gain-1),0.0f,8.0f)*0.3f)*(interp_l+0.5f));
+            Ov_Buffer[i] *= 1- ((clamp((gain-1),0.0f,8.0f))*(interp_l+0.5f));
 
 
             Ov_Buffer[i] *= (gain*2.0f);
