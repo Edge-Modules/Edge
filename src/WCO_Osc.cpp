@@ -31,6 +31,7 @@ struct VoltageControlledOscillator {
 	float ar_window = 0.5f;
 	float bl_window = 0.5f;
 	float br_window = 0.5f;
+	float faded_wavfr,faded_wavre = 0.0f;
 	//
 	bool syncEnabled = false;
 	bool syncDirection = false;
@@ -119,6 +120,23 @@ struct VoltageControlledOscillator {
 
 	    _wavefront*=63;
 	    _waverear*=63;
+
+	    float dif_fr = _wavefront - faded_wavfr;
+	    if(dif_fr>0){
+            _wavefront += min(dif_fr,0.01f);
+	    }
+        if(dif_fr<0){
+            _wavefront += max(dif_fr,-0.01f);
+        }
+	    float dif_re = _waverear - faded_wavre;
+	    if(dif_re>0){
+            _waverear += min(dif_re,0.01f);
+	    }
+        if(dif_fr<0){
+            _waverear += max(dif_re,-0.01f);
+        }
+
+
 	    if(_wavefront>63.0f){_wavefront=63.0f;}
 	    if(_waverear>63.0f){_waverear=63.0f;}
 	    if(_wavefront<=0.0f){_wavefront=0.00f;}

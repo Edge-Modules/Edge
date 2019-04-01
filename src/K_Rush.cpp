@@ -28,6 +28,7 @@ struct Diode{
 	short temp_buf[256]={0};
     bool tab_loaded = false;
     float out = 0.0f;
+    float faded_type = 0.0f;
 
 
 
@@ -56,6 +57,13 @@ struct Diode{
             LoadWaves();
         }
 
+        float dif_type = type - faded_type;
+	    if(dif_type>0){
+            type += min(dif_type,0.01f);
+	    }
+        if(dif_type<0){
+            type += max(dif_type,-0.01f);
+        }
 
 
         in=(in-(feedback*(gain/8.0f)));
