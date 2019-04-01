@@ -6,8 +6,7 @@
 #include <fstream>
 #include <string>
 
-
-
+#include "dep/dr_wav.h"
 
 
 using namespace std;
@@ -23,9 +22,9 @@ struct Diode{
     RCFilter filter1;
 
     string plug_directory = assetPlugin(plugin, "res/waves2/");
-	float wave[64][256]={{0}};
+	float wave[64][256]={{0.0f}};
     const string wavefiles[64]={"00.wav","01.wav","02.wav","03.wav","04.wav","05.wav","06.wav","07.wav","08.wav","09.wav","10.wav","11.wav","12.wav","13.wav","14.wav","15.wav","16.wav","17.wav","18.wav","19.wav","20.wav","21.wav","22.wav","23.wav","24.wav","25.wav","26.wav","27.wav","28.wav","29.wav","30.wav","31.wav","32.wav","33.wav","34.wav","35.wav","36.wav","37.wav","38.wav","39.wav","40.wav","41.wav","42.wav","43.wav","44.wav","45.wav","46.wav","47.wav","48.wav","49.wav","50.wav","51.wav","52.wav","53.wav","54.wav","55.wav","56.wav","57.wav","58.wav","59.wav","60.wav","61.wav","62.wav","63.wav"};
-    FILE *wave_f = NULL;
+
 	short temp_buf[256]={0};
     bool tab_loaded = false;
     float out = 0.0f;
@@ -36,21 +35,15 @@ struct Diode{
 
         for(int j=0; j<64; j++){
             string file_name = plug_directory+wavefiles[j];
-            const char *c = file_name.c_str();
-            wave_f = NULL;
-            wave_f = fopen(c,"r");
-            if(wave_f!=NULL){
-                fseek(wave_f,44,SEEK_SET);
-                fread(temp_buf,sizeof(temp_buf),256,wave_f);
-                for(int i = 0; i<256 ; i++){
-                    wave[j][i] = ((float)temp_buf[i])/pow(256,2);
-                }
-                fclose(wave_f);
+            const char *chemin = file_name.c_str();
+            unsigned int channels;
+            unsigned int sampleRate;
+            drwav_uint64 totalPCMFrameCount;
+            float* pSampleData = drwav_open_file_and_read_pcm_frames_f32(chemin, &channels, &sampleRate, &totalPCMFrameCount);
+            for(int i = 0; i<256 ; i++){
+                wave[j][i] = pSampleData[i]/2.0f;
             }
-            else{
-                j=0;
-
-            }
+            drwav_free(pSampleData);;
         }
         tab_loaded = true;
     }
@@ -106,7 +99,7 @@ struct Diode{
             interp_l+= interpolateLinear(wave[(int)type],index)*coef1f;
             interp_l+= interpolateLinear(wave[(int)type+1],index)*coef2f;
 
-            Ov_Buffer[i] *= 1- ((clamp((gain-1),0.0f,8.0f)*0.3)*(interp_l+0.5f));
+            Ov_Buffer[i] *= 1- ((clamp((gain-1),0.0f,8.0f)*0.2)*(interp_l+0.5f));
 
 
             Ov_Buffer[i] *= (gain*2.0f);

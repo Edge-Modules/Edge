@@ -8,6 +8,8 @@
 #include <string>
 
 
+#define DR_WAV_IMPLEMENTATION
+#include "dep/dr_wav.h"
 
 
 using namespace std;
@@ -34,8 +36,7 @@ struct VoltageControlledOscillator {
 	bool syncDirection = false;
 	bool invert = false;
     bool tab_loaded = false;
-	//FILE * temp_file_out = NULL;
-    FILE * wave_f = NULL;
+
 	short temp_buf[256]={0};
     float mid_phase = 0.0f;
 	float buf_wavefront[256]={0};
@@ -62,21 +63,15 @@ struct VoltageControlledOscillator {
 
         for(int j=0; j<64; j++){
             string file_name = plug_directory+wavefiles[j];
-            const char *c = file_name.c_str();
-            wave_f = NULL;
-            wave_f = fopen(c,"r");
-            if(wave_f!=NULL){
-                fseek(wave_f,44,SEEK_SET);
-                fread(temp_buf,sizeof(temp_buf),256,wave_f);
-                for(int i = 0; i<256 ; i++){
-                    wave[j][i] = ((float)temp_buf[i])/pow(256,2);
-                }
-                fclose(wave_f);
+            const char *chemin = file_name.c_str();
+            unsigned int channels;
+            unsigned int sampleRate;
+            drwav_uint64 totalPCMFrameCount;
+            float* pSampleData = drwav_open_file_and_read_pcm_frames_f32(chemin, &channels, &sampleRate, &totalPCMFrameCount);
+            for(int i = 0; i<256 ; i++){
+                wave[j][i] = pSampleData[i]/2.0f;
             }
-            else{
-                j=0;
-
-            }
+            drwav_free(pSampleData);;
         }
         tab_loaded = true;
     }
