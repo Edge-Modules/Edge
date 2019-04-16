@@ -12,5 +12,5 @@ const NVGcolor YELLOW = nvgRGBA(255, 233, 0, 255);
 extern Plugin *plugin;
 
 extern Model *modelWCO_Osc;
-//extern Model *modelWTFDoveVCO_IIR;
 extern Model *modelK_Rush;
+extern Model *modelBad_Haas;

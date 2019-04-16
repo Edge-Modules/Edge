@@ -7,7 +7,6 @@
 #include <fstream>
 #include <string>
 
-
 #define DR_WAV_IMPLEMENTATION
 #include "dep/dr_wav.h"
 
@@ -37,7 +36,8 @@ struct VoltageControlledOscillator {
 	bool syncDirection = false;
 	bool invert = false;
     bool tab_loaded = false;
-
+	//FILE * temp_file_out = NULL;
+    //FILE * wave_f = NULL;
 	short temp_buf[256]={0};
     float mid_phase = 0.0f;
 	float buf_wavefront[256]={0};
@@ -65,13 +65,25 @@ struct VoltageControlledOscillator {
         for(int j=0; j<64; j++){
             string file_name = plug_directory+wavefiles[j];
             const char *chemin = file_name.c_str();
+
             unsigned int channels;
             unsigned int sampleRate;
             drwav_uint64 totalPCMFrameCount;
             float* pSampleData = drwav_open_file_and_read_pcm_frames_f32(chemin, &channels, &sampleRate, &totalPCMFrameCount);
+
+            //Normalisation
+
+            float max_value = 0.0f;
+            for(int i = 0; i<256 ; i++){
+                    max_value = max(max_value,abs(pSampleData[i]/2.0));
+            }
+
             for(int i = 0; i<256 ; i++){
                 wave[j][i] = pSampleData[i]/2.0f;
+                wave[j][i] = wave[j][i]*(1/max_value);
+                //wave[j][i] = max_value/5;
             }
+
             drwav_free(pSampleData);;
         }
         tab_loaded = true;
@@ -116,7 +128,7 @@ struct VoltageControlledOscillator {
 
 	}
 	////////////////////////////////////////////////////////////////////////////////////////////////////////
-	void setWaves(float _wavefront,float _waverear){
+	void setWaves(float _wavefront,float _waverear,int auto_scale){
 
 	    _wavefront*=63;
 	    _waverear*=63;
@@ -145,7 +157,9 @@ struct VoltageControlledOscillator {
 	    float coef2f = 1 - coef1f;
         float coef1r = _waverear-int(_waverear);
 	    float coef2r = 1 - coef1r;
+	    float max_wav_f, max_wav_r = 0.0f;
         for(int i = 0; i<=255; i++){
+
             if(_wavefront<63){
                 buf_wavefront[i] = coef2f*wave[int(_wavefront)][i]+coef1f*wave[int(_wavefront)+1][i];
             }
@@ -158,7 +172,21 @@ struct VoltageControlledOscillator {
             else{
                 buf_waverear[i] = wave[int(_waverear)][i];
             }
+            max_wav_f = max(max_wav_f,abs(buf_wavefront[i]));
+            max_wav_r = max(max_wav_r,abs(buf_waverear[i]));
         }
+
+        //RESCALING ->
+        if(auto_scale==1){
+            for(int i = 0; i<=255; i++){
+                buf_wavefront[i] = buf_wavefront[i]*(1/max_wav_f);
+                buf_waverear[i] = buf_waverear[i]*(1/max_wav_r);
+            }
+        }
+
+
+        faded_wavfr = _wavefront;
+        faded_wavre = _waverear;
 	}
 
 
@@ -327,7 +355,7 @@ struct VoltageControlledOscillator {
 			}
 
 			// Advance phase
-            sinBuffer[i]=1.66f * interpolateLinear(buf_final, phase*255.0f) ;
+            sinBuffer[i]= interpolateLinear(buf_final, phase*255.0f) ;
             sqrFilter.process(sinBuffer[i]);
             sinBuffer[i]=sqrFilter.lowpass();
             phase += deltaPhase / OVERSAMPLE;
@@ -405,6 +433,8 @@ struct WCO_Osc : Module {
 	float l_MODE_PARAM;
 	float l_FM_INPUT;
 
+	int lfo_range,autoscale = 0;
+
 	WCO_Osc() : Module(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS) {
 	srand(time(0));
 	}
@@ -440,7 +470,7 @@ void WCO_Osc::step() {
     }
 
     if( ( params[FRONT_PARAM].value != l_FRONT_PARAM ) || (params[CV_FRONT_PARAM].value != l_CV_FRONT_PARAM ) || (inputs[FRONT_INPUT].value != l_FRONT_INPUT) || ( params[REAR_PARAM].value != l_REAR_PARAM ) || (params[CV_REAR_PARAM].value != l_CV_REAR_PARAM ) || (inputs[REAR_INPUT].value != l_REAR_INPUT) || oscillator.tab_loaded == false ){
-        oscillator.setWaves( params[FRONT_PARAM].value+(params[CV_FRONT_PARAM].value*(inputs[FRONT_INPUT].value/10)),params[REAR_PARAM].value+(params[CV_REAR_PARAM].value*(inputs[REAR_INPUT].value/10)));
+        oscillator.setWaves( params[FRONT_PARAM].value+(params[CV_FRONT_PARAM].value*(inputs[FRONT_INPUT].value/5)),params[REAR_PARAM].value+(params[CV_REAR_PARAM].value*(inputs[REAR_INPUT].value/5)),autoscale);
 	}
 
     oscillator.process(engineGetSampleTime(), inputs[SYNK_INPUT].value);
@@ -448,10 +478,16 @@ void WCO_Osc::step() {
 	// Set output
 	if (outputs[OUTPUT].active){
         if(params[LFO_NOISE_PARAM].value == 1){
-            outputs[OUTPUT].value = clamp ((5.0f * oscillator.sin()),-5.0f,5.0f);
+            outputs[OUTPUT].value = clamp (5.0f* oscillator.sin() ,-5.0f,5.0f);
         }
         else{
-            outputs[OUTPUT].value = clamp (2.5f*(oscillator.sin()+1.0f),0.0f,5.0f);
+            if(lfo_range == 1){
+                outputs[OUTPUT].value = clamp ((5.0f * (1+oscillator.sin())),0.0f,10.0f);
+            }
+            else{
+               outputs[OUTPUT].value = clamp ((5.0f * oscillator.sin()),-5.0f,5.0f);
+            }
+
         }
 
 
@@ -510,7 +546,7 @@ void draw(NVGcontext *vg) override {
             y = this->module->oscillator.buf_wavefront[255];
         else
             y = this->module->oscillator.buf_wavefront[index];
-        y=y*54;
+        y=y*28;
         if(i==0){
             nvgMoveTo(vg, 0, 28-y);
         }
@@ -540,7 +576,7 @@ void draw(NVGcontext *vg) override {
             else
                 y = this->module->oscillator.buf_waverear[index];
         }
-        y=y*54;
+        y=y*28;
         if(i==0){
             nvgMoveTo(vg, 0, 28-y);
         }
@@ -632,7 +668,7 @@ void draw(NVGcontext *vg) override {
                    }
                 }
             }
-        y=y*54;
+        y=y*28;
         if(i==0){
             nvgMoveTo(vg, 0, 28-y);
         }
@@ -654,6 +690,7 @@ nvgLineJoin(vg, NVG_ROUND);
 
 
 struct WCO_OscWidget : ModuleWidget {
+    Menu *createContextMenu() override;
 	WCO_OscWidget(WCO_Osc *module);
 };
 
@@ -694,9 +731,82 @@ WCO_OscWidget::WCO_OscWidget(WCO_Osc *module) : ModuleWidget(module) {
     addInput(Port::create<PJ301MPort>(Vec(17.5, 300), Port::INPUT, module, WCO_Osc::FRONT_INPUT));
 	addInput(Port::create<PJ301MPort>(Vec(63, 300), Port::INPUT, module, WCO_Osc::WIDTH_INPUT));
 	addInput(Port::create<PJ301MPort>(Vec(110.5, 300), Port::INPUT, module, WCO_Osc::REAR_INPUT));
-
-
 }
+
+
+
+struct WCO_OscItem1 : MenuItem {
+	WCO_Osc *pt_WCO_Osc;
+	void onAction(EventAction &e) override {
+	    pt_WCO_Osc->lfo_range = 0;
+	}
+	void step() override {
+		rightText = pt_WCO_Osc->lfo_range ?  "" : "✔";
+		MenuItem::step();
+	}
+};
+
+struct WCO_OscItem2 : MenuItem {
+	WCO_Osc *pt_WCO_Osc;
+	void onAction(EventAction &e) override {
+        pt_WCO_Osc->lfo_range = 1;
+	}
+    void step() override {
+		rightText = pt_WCO_Osc->lfo_range ? "✔" : "" ;
+		MenuItem::step();
+	}
+
+};
+
+struct WCO_OscItem3 : MenuItem {
+	WCO_Osc *pt_WCO_Osc;
+	void onAction(EventAction &e) override {
+        if(pt_WCO_Osc->autoscale == 1){
+            pt_WCO_Osc->autoscale = 0;
+        }
+        else{
+            pt_WCO_Osc->autoscale = 1;
+        }
+        pt_WCO_Osc->l_CV_FRONT_PARAM = pt_WCO_Osc->l_CV_FRONT_PARAM+0.01;
+	}
+	void step() override {
+		rightText = pt_WCO_Osc->autoscale ? "✔" : "";
+		MenuItem::step();
+	}
+};
+
+
+
+Menu *WCO_OscWidget::createContextMenu() {
+    Menu *menu = ModuleWidget::createContextMenu();
+
+    MenuLabel *spacerLabel = new MenuLabel();
+    menu->addChild(spacerLabel);
+
+    WCO_Osc *pt_WCO_Osc = dynamic_cast<WCO_Osc*>(module);
+    assert(pt_WCO_Osc);
+
+    WCO_OscItem1 *Range1 = new WCO_OscItem1();
+    Range1->text = "LFO Range -5 / 5 V";
+    Range1->pt_WCO_Osc = pt_WCO_Osc;
+    menu->addChild(Range1);
+
+    WCO_OscItem2 *Range2 = new WCO_OscItem2();
+    Range2->text = "LFO Range 0 /  10 V";
+    Range2->pt_WCO_Osc = pt_WCO_Osc;
+    menu->addChild(Range2);
+
+    WCO_OscItem3 *AutoScale = new WCO_OscItem3();
+    AutoScale->text = "Autoscale";
+    AutoScale->pt_WCO_Osc = pt_WCO_Osc;
+    menu->addChild(AutoScale);
+
+    return menu;
+}
+
+
+
+
 
 
 Model *modelWCO_Osc = Model::create<WCO_Osc, WCO_OscWidget>("Edge", "WCO_Osc", "WCO_Osc", OSCILLATOR_TAG);
