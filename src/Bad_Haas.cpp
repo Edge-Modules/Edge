@@ -29,7 +29,7 @@ struct Bad_Haas : Module {
 
 	int sample_rate = engineGetSampleRate();
 
-    float Delay_buff[2048]={0};;
+    float Delay_buff[4096]={0};;
     float last_panningLR,last_panningUB = 0.0f;
     float last_index_l, last_index_r = 0.0f;
     int index = 0;
@@ -65,7 +65,7 @@ void Bad_Haas::step() {
 
     float dry_wet = clamp(params[DRY_WET].value+((inputs[IN_DRY_WET].value/5.0f)*params[CV_DRY_WET].value),-1.0f,1.0f);
 
-    if(index==2048){index=0;}
+    if(index==4096){index=0;}
     Delay_buff[index]= inputs[INPUT].value ;
 
     // LEFT / RIGHT PART
@@ -79,12 +79,12 @@ void Bad_Haas::step() {
     coefL = clamp(panningLR,0.0f,1.0f);
     coefR = abs(clamp(panningLR,-1.0f,0.0f));
 
-    float indexL = index - (ms_to_smp(2)*coefL);
-    float indexR = index - (ms_to_smp(2)*coefR);
+    float indexL = index - (ms_to_smp(7)*coefL);
+    float indexR = index - (ms_to_smp(7)*coefR);
     float temp_l =  indexL;
-    if(temp_l<=0){temp_l+=2047;}
+    if(temp_l<=0){temp_l+=4095;}
     float temp_r =  indexR;
-    if(temp_r<=0){temp_r+=2047;}
+    if(temp_r<=0){temp_r+=4095;}
 
     //test early reflection
 /*
