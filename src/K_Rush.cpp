@@ -1,41 +1,53 @@
 #include "Edge.hpp"
 
-#include "dsp/resampler.hpp"
-#include "dsp/filter.hpp"
-#include <iostream>
-#include <fstream>
-#include <string>
-
 #include "dep/dr_wav.h"
 
 
+
+
 using namespace std;
+static const size_t BLOCK_SIZE = 512;
+static const float PI = 3.1416f;
+
 
 
 /**Diode -> in  -1V / +1V **/
 struct Diode{
     float phase_in, phase_out = 0.0f;
-    Upsampler<4,16> Upsample;
-    Decimator<4,16> Decimate;
+    dsp::Upsampler<4,16> Upsample;
+    dsp::Decimator<4,16> Decimate;
     float Ov_Buffer[16] = {0};
 
-    RCFilter filter1;
+    dsp::RCFilter filter1;
 
-    string plug_directory = assetPlugin(plugin, "res/waves2/");
+    std::string plug_directory = asset::plugin(pluginInstance, "res/waves2/");
 	float wave[64][256]={{0.0f}};
-    const string wavefiles[64]={"00.wav","01.wav","02.wav","03.wav","04.wav","05.wav","06.wav","07.wav","08.wav","09.wav","10.wav","11.wav","12.wav","13.wav","14.wav","15.wav","16.wav","17.wav","18.wav","19.wav","20.wav","21.wav","22.wav","23.wav","24.wav","25.wav","26.wav","27.wav","28.wav","29.wav","30.wav","31.wav","32.wav","33.wav","34.wav","35.wav","36.wav","37.wav","38.wav","39.wav","40.wav","41.wav","42.wav","43.wav","44.wav","45.wav","46.wav","47.wav","48.wav","49.wav","50.wav","51.wav","52.wav","53.wav","54.wav","55.wav","56.wav","57.wav","58.wav","59.wav","60.wav","61.wav","62.wav","63.wav"};
+    const std::string wavefiles[64]={"00.wav","01.wav","02.wav","03.wav","04.wav","05.wav","06.wav","07.wav","08.wav","09.wav","10.wav","11.wav","12.wav","13.wav","14.wav","15.wav","16.wav","17.wav","18.wav","19.wav","20.wav","21.wav","22.wav","23.wav","24.wav","25.wav","26.wav","27.wav","28.wav","29.wav","30.wav","31.wav","32.wav","33.wav","34.wav","35.wav","36.wav","37.wav","38.wav","39.wav","40.wav","41.wav","42.wav","43.wav","44.wav","45.wav","46.wav","47.wav","48.wav","49.wav","50.wav","51.wav","52.wav","53.wav","54.wav","55.wav","56.wav","57.wav","58.wav","59.wav","60.wav","61.wav","62.wav","63.wav"};
 
 	short temp_buf[256]={0};
     bool tab_loaded = false;
     float out = 0.0f;
     float faded_type = 0.0f;
+    bool first_alg,fft_try = false;
+    float l_type = 0;
+    float buf_in[BLOCK_SIZE]={0.0f};
+    float buf_out[BLOCK_SIZE]={0.0f};
+    dsp::RealTimeConvolver *convolver = NULL;
 
+    Diode(){
+        LoadWaves();
+    }
+
+    ~Diode(){
+
+
+    }
 
 
     void LoadWaves(){
 
         for(int j=0; j<64; j++){
-            string file_name = plug_directory+wavefiles[j];
+            std::string file_name = plug_directory+wavefiles[j];
             const char *chemin = file_name.c_str();
             unsigned int channels;
             unsigned int sampleRate;
@@ -53,77 +65,132 @@ struct Diode{
 
     float proc_f_d1(float in, float gain, float type,float feedback){
 
-        if(tab_loaded == false){
-            LoadWaves();
-        }
 
-        float dif_type = type - faded_type;
-	    if(dif_type>0){
-            type += min(dif_type,0.01f);
-	    }
-        if(dif_type<0){
-            type += max(dif_type,-0.01f);
-        }
+        if(first_alg){
+            //gain = (gain+1);
 
-
-        in=(in-(feedback*(gain/8.0f)));
-        Upsample.process(in,Ov_Buffer);
-        filter1.setCutoff((44100 * (engineGetSampleTime()/4)));
-        float index = 0.0f;
-
-        type = clamp(type, 0.00f,14.99f);
-
-        //OVRS
-        for(int i = 0 ; i< 4 ; i++){
-
-            if (Ov_Buffer[i]<0)
-                phase_in = -1.0f;
-            else
-                phase_in = 1.0f;
-
-
-            Ov_Buffer[i] = abs(Ov_Buffer[i]);
-
-
-            index =  tanh(Ov_Buffer[i])*255;//*clamp(((gain/4.0f)-1.0f),0.0f,2.0f);
-            index= 255.0f-index*2;
-
-            index = abs(index);
-
-
-            clamp(index,0.01f,255.0f);
-
-
-            float coef1f, coef2f = 0.0f;
-            float interp_l = 0.0f;
-            if( (int)type > type ){
-                coef1f = (int) type - type;
-                coef2f = 1 - coef1f;
+            /*
+            if(tab_loaded == false){
+                LoadWaves();
             }
-            else{
-                coef2f = type - (int) type;
-                coef1f = 1 - coef2f;
+
+            in=(in-(feedback*(gain/8.0f)));
+            Upsample.process(in,Ov_Buffer);
+            filter1.setCutoff((44100 *engineGetSampleTime()/4));
+            float index= 0.0f;
+
+            for(int i = 0 ; i< 4 ; i++){
+
+                if(Ov_Buffer[i]>=0)
+                    phase_in=1.0f;
+                if(Ov_Buffer[i]<0)
+                    phase_in= -1.0f;
+                Ov_Buffer[i] = abs(Ov_Buffer[i]*gain);
+                index =  Ov_Buffer[i]*16;
+
+                while(index>255){
+                    index-=255;
+                }
+                while(index<0){
+                    index+=255;
+                }
+                Ov_Buffer[i] *= 1- ((clamp((gain-1),0.0f,8.0f)*0.2)*(interpolateLinear(wave[(int)type],index)+0.5f));
+
+                Ov_Buffer[i] = Ov_Buffer[i]*phase_in;
+
+                filter1.process(Ov_Buffer[i]);
+                Ov_Buffer[i]=filter1.lowpass();
             }
-            interp_l+= interpolateLinear(wave[(int)type],index)*coef1f;
-            interp_l+= interpolateLinear(wave[(int)type+1],index)*coef2f;
+            in=Decimate.process(Ov_Buffer);
+            */
+            float sin_in = sin(PI*in);
+            int index = in*255;
+            float cos_wave = cos(PI*(gain*wave[(int)type][index]));
+            out = sin_in * cos_wave;
 
-            Ov_Buffer[i] *= 1- ((clamp((gain-1),0.0f,8.0f)*0.2)*(interp_l+0.5f));
+            //float out = clamp(out,-1.0f,1.0f);
+
+            return out ;
+        }
+
+        else{
+           if(tab_loaded == false){
+                LoadWaves();
+            }
+
+            float dif_type = type - faded_type;
+            if(dif_type>0){
+                type += std::min(dif_type,0.01f);
+            }
+            if(dif_type<0){
+                type += std::max(dif_type,-0.01f);
+            }
 
 
-            Ov_Buffer[i] *= (gain*2.0f);
-            Ov_Buffer[i] = tanh(Ov_Buffer[i]);
-            if(phase_in>0.0f)
-                Ov_Buffer[i] = phase_in*Ov_Buffer[i];
-            else
-                Ov_Buffer[i] = phase_in*(Ov_Buffer[i]);
+            in=(in-(feedback*(gain/8.0f)));
+            Upsample.process(in,Ov_Buffer);
+            filter1.setCutoff((44100 * (APP->engine->getSampleTime()/4)));
+            float index = 0.0f;
 
-            filter1.process(Ov_Buffer[i]);
-            Ov_Buffer[i]=filter1.lowpass();
+            type = clamp(type, 0.00f,14.99f);
+
+            //OVRS
+            for(int i = 0 ; i< 4 ; i++){
+
+                if (Ov_Buffer[i]<0)
+                    phase_in = -1.0f;
+                else
+                    phase_in = 1.0f;
+
+
+                Ov_Buffer[i] = abs(Ov_Buffer[i]);
+
+
+                index =  tanh(Ov_Buffer[i])*255;//*clamp(((gain/4.0f)-1.0f),0.0f,2.0f);
+                index= 255.0f-index*2;
+
+                index = abs(index);
+
+
+                clamp(index,0.01f,255.0f);
+
+
+                float coef1f, coef2f = 0.0f;
+                float interp_l = 0.0f;
+                if( (int)type > type ){
+                    coef1f = (int) type - type;
+                    coef2f = 1 - coef1f;
+                }
+                else{
+                    coef2f = type - (int) type;
+                    coef1f = 1 - coef2f;
+                }
+                interp_l+= interpolateLinear(wave[(int)type],index)*coef1f;
+                interp_l+= interpolateLinear(wave[(int)type+1],index)*coef2f;
+
+                Ov_Buffer[i] *= 1- ((clamp((gain-1),0.0f,8.0f)*0.2)*(interp_l+0.5f));
+
+
+                Ov_Buffer[i] *= (gain*2.0f);
+                Ov_Buffer[i] = tanh(Ov_Buffer[i]);
+                if(phase_in>0.0f)
+                    Ov_Buffer[i] = phase_in*Ov_Buffer[i];
+                else
+                    Ov_Buffer[i] = phase_in*(Ov_Buffer[i]);
+
+                filter1.process(Ov_Buffer[i]);
+                Ov_Buffer[i]=filter1.lowpass();
+
+            }
+            in=Decimate.process(Ov_Buffer);//*phase_in;
+            out = clamp(in,-1.0f,1.0f);
+
+
+            return out ;
+
 
         }
-        in=Decimate.process(Ov_Buffer);//*phase_in;
-        out = clamp(in,-1.0f,1.0f);
-        return out ;
+
 
 
     }
@@ -133,7 +200,10 @@ struct Diode{
 
 
 
+
+
 struct K_Rush : Module {
+
 	enum ParamIds {
 	    TRIM_PARAM,
 	    MIX_PARAM,
@@ -181,12 +251,20 @@ struct K_Rush : Module {
 
     Diode d_pos,d_neg;
 
-	K_Rush() : Module(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS) {
+	K_Rush() {
+		config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
+		configParam(TRIM_PARAM, -4.0f, 4.0f, 1.0f);
+		configParam(WAVET_PARAM, 0.0f, 15.0f, 0.0f);
+		configParam(MIX_PARAM, 0.0f, 1.0f, 1.0f);
+		configParam(GAIN_PARAM, 0.0f, 8.0f, 1.0f);
+		configParam(FEEDBACK_PARAM, 0.0f, 1.0f, 0.0f);
+		configParam(CV_GAIN_PARAM, -1.0f, 1.0f, 0.0f);
+		configParam(CV_FEEDBACK_PARAM, 0.0f, 0.3f, 0.0f);
 	}
 
 
 
-	void step() override;
+	void process(const ProcessArgs &args) override;
 
 	// For more advanced Module features, read Rack's engine.hpp header file
 	// - toJson, fromJson: serialization of internal data
@@ -198,60 +276,105 @@ struct K_Rush : Module {
 
 
 
-void K_Rush::step() {
+void K_Rush::process(const ProcessArgs &args) {
 
 
-    float gain = params[GAIN_PARAM].value;
+    float gain = params[GAIN_PARAM].getValue();
 
 
-    float feed_back = clamp((params[FEEDBACK_PARAM].value + (params[CV_FEEDBACK_PARAM].value*inputs[CV_FEEDBACK_INPUT].value)),0.0f,1.0f)*(inputs[FEEDBACK_INPUT].value/5.0f);
+    float feed_back = clamp((params[FEEDBACK_PARAM].getValue() + (params[CV_FEEDBACK_PARAM].getValue()*inputs[CV_FEEDBACK_INPUT].getVoltage())),0.0f,1.0f)*(inputs[FEEDBACK_INPUT].getVoltage()/5.0f);
     //float in = (inputs[IN_INPUT].value/5.0f)-((inputs[FEEDBACK_INPUT].value/5.0f)/clamp(16/gain,1.0f,16.0f) *feed_back);
-    float in = (inputs[IN_INPUT].value/5.0)*params[TRIM_PARAM].value;
+    float in = (inputs[IN_INPUT].getVoltage()/5.0)*params[TRIM_PARAM].getValue();
     if(inputs[CV_GAIN_INPUT].active)
-        gain += (inputs[CV_GAIN_INPUT].value*params[CV_GAIN_PARAM].value);
+        gain += (inputs[CV_GAIN_INPUT].getVoltage()*params[CV_GAIN_PARAM].getValue());
 
     gain = clamp(gain,0.0f,8.0f);
-    float type_diode = params[WAVET_PARAM].value+(inputs[TYPE_INPUT].value * 2.0f);
+    float type_diode = params[WAVET_PARAM].getValue()+(inputs[TYPE_INPUT].getVoltage() * 2.0f);
     in = d_pos.proc_f_d1(in ,gain,type_diode,feed_back);
-    outputs[OUT_OUTPUT].value = (params[MIX_PARAM].value*in*5)+((1-params[MIX_PARAM].value)*inputs[IN_INPUT].value);
-    outputs[FEEDBACK_OUTPUT].value = in*5;
+    outputs[OUT_OUTPUT].setVoltage((params[MIX_PARAM].getValue()*in*5)+((1-params[MIX_PARAM].getValue())*inputs[IN_INPUT].getVoltage()));
+    outputs[FEEDBACK_OUTPUT].setVoltage(in*5);
 
 
 }
 
-
 struct K_RushWidget : ModuleWidget {
-	K_RushWidget(K_Rush *module) : ModuleWidget(module) {
-		setPanel(SVG::load(assetPlugin(plugin, "res/K_Rush.svg")));
+    Menu *createContextMenu();
+	K_RushWidget(K_Rush *module);
 
-		addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(15.2, 85.5), module, K_Rush::TRIM_PARAM, -4.0f, 4.0f, 1.0f));
-        addParam(ParamWidget::create<RoundBlackKnob>(Vec(60.5, 82.8), module, K_Rush::WAVET_PARAM, 0.0f, 15.0f, 0.0f));
-        addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(110.9, 85.5), module, K_Rush::MIX_PARAM, 0.0f, 1.0f, 1.0f));
-
-		addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(12.2, 158.7), module, K_Rush::GAIN_PARAM, 0.0f, 8.0f, 1.0f));
-		addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(100, 256.7), module, K_Rush::FEEDBACK_PARAM, 0.0f, 1.0f, 0.0f));
-
-		addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(106.9, 165.7), module, K_Rush::CV_GAIN_PARAM, -1.0f, 1.0f, 0.0f));
-		addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(19.3, 263.8), module, K_Rush::CV_FEEDBACK_PARAM, 0.0f, 0.3f, 0.0f));
-
-        addInput(Port::create<PJ301MPort>(Vec(62.3, 125), Port::INPUT, module, K_Rush::TYPE_INPUT));
-		addInput(Port::create<PJ301MPort>(Vec(62.3, 205), Port::INPUT, module, K_Rush::CV_GAIN_INPUT));
-        addInput(Port::create<PJ301MPort>(Vec(62.3, 302.6), Port::INPUT, module, K_Rush::CV_FEEDBACK_INPUT));
-
-        addInput(Port::create<PJ301MPort>(Vec(9.3, 345), Port::INPUT, module, K_Rush::FEEDBACK_INPUT));
-		addInput(Port::create<PJ301MPort>(Vec(62.3, 345), Port::INPUT, module, K_Rush::IN_INPUT));
-		addOutput(Port::create<PJ301MPort>(Vec(115.3, 345), Port::OUTPUT, module, K_Rush::OUT_OUTPUT));
+};
 
 
+K_RushWidget ::K_RushWidget(K_Rush *module) {
+		setModule(module);
+    setPanel(APP->window->loadSvg(asset::plugin(pluginInstance, "res/K_Rush.svg")));
+
+    //addParam(createParamWidget<RoundSmallBlackKnob>(Vec(15.2, 85.5), module, K_Rush::TRIM_PARAM, -4.0f, 4.0f, 1.0f));
+    addParam(createParam<RoundSmallBlackKnob>(Vec(15.2, 85.5), module, K_Rush::TRIM_PARAM));
+
+    addParam(createParam<RoundBlackKnob>(Vec(60.5, 82.8), module, K_Rush::WAVET_PARAM));
+    addParam(createParam<RoundSmallBlackKnob>(Vec(110.9, 85.5), module, K_Rush::MIX_PARAM));
+
+    addParam(createParam<RoundLargeBlackKnob>(Vec(12.2, 158.7), module, K_Rush::GAIN_PARAM));
+    addParam(createParam<RoundLargeBlackKnob>(Vec(100, 256.7), module, K_Rush::FEEDBACK_PARAM));
+
+    addParam(createParam<RoundSmallBlackKnob>(Vec(106.9, 165.7), module, K_Rush::CV_GAIN_PARAM));
+    addParam(createParam<RoundSmallBlackKnob>(Vec(19.3, 263.8), module, K_Rush::CV_FEEDBACK_PARAM));
+
+    addInput(createInput<PJ301MPort>(Vec(62.3, 125),  module, K_Rush::TYPE_INPUT));
+    addInput(createInput<PJ301MPort>(Vec(62.3, 205),  module, K_Rush::CV_GAIN_INPUT));
+    addInput(createInput<PJ301MPort>(Vec(62.3, 302.6), module, K_Rush::CV_FEEDBACK_INPUT));
+
+    addInput(createInput<PJ301MPort>(Vec(9.3, 345), module, K_Rush::FEEDBACK_INPUT));
+    addInput(createInput<PJ301MPort>(Vec(62.3, 345), module, K_Rush::IN_INPUT));
+    addOutput(createOutput<PJ301MPort>(Vec(115.3, 345), module, K_Rush::OUT_OUTPUT));
+
+
+
+};
+/*
+struct K_RushItem1 : MenuItem {
+	K_Rush *pt_K_Rush;
+	void onAction(event::Action &e) {
+	    if(pt_K_Rush->d_pos.first_alg == false){
+            pt_K_Rush->d_pos.first_alg = true;
+            pt_K_Rush->d_pos.fft_try = false;
+	    }
+	    else{
+            pt_K_Rush->d_pos.first_alg = false;
+	    }
+
+	}
+	void process(const ProcessArgs &args) {
+		rightText = pt_K_Rush->d_pos.first_alg ? "✔" : "";
+		MenuItem::step();
 	}
 };
 
 
-// Specify the Module and ModuleWidget subclass, human-readable
-// author name for categorization per plugin, module slug (should never
-// change), human-readable module name, and any number of tags
-// (found in `include/tags.hpp`) separated by commas.
-Model *modelK_Rush = Model::create<K_Rush, K_RushWidget>("Edge", "K_Rush", "K_Rush", WAVESHAPER_TAG);
+
+Menu *K_RushWidget::createContextMenu() {
+    Menu *menu;
+    ModuleWidget::createContextMenu();
+
+    MenuLabel *spacerLabel;;
+    menu->addChild(spacerLabel);
+
+    K_Rush *pt_K_Rush = dynamic_cast<K_Rush*>(module);
+    assert(pt_K_Rush);
+
+    K_RushItem1 *Range1 = new K_RushItem1();
+    Range1->text = "1rst Algo.";
+    Range1->pt_K_Rush = pt_K_Rush;
+    menu->addChild(Range1);
+
+
+
+
+    return menu;
+}
+
+*/
+Model *modelK_Rush = createModel<K_Rush, K_RushWidget>("K_Rush");
 
 
 

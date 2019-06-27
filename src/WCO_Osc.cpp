@@ -1,7 +1,6 @@
 
 #include "Edge.hpp"
-#include "dsp/resampler.hpp"
-#include "dsp/filter.hpp"
+
 #include "Edge_Component.hpp"
 #include <iostream>
 #include <fstream>
@@ -45,12 +44,12 @@ struct VoltageControlledOscillator {
 	float buf_final[257]={0};
 
 
-    string plug_directory = assetPlugin(plugin, "res/waves/");
+    std::string plug_directory = asset::plugin(pluginInstance, "res/waves/");
 	float wave[64][256]={{0}};
-    const string wavefiles[64]={"00.wav","01.wav","02.wav","03.wav","04.wav","05.wav","06.wav","07.wav","08.wav","09.wav","10.wav","11.wav","12.wav","13.wav","14.wav","15.wav","16.wav","17.wav","18.wav","19.wav","20.wav","21.wav","22.wav","23.wav","24.wav","25.wav","26.wav","27.wav","28.wav","29.wav","30.wav","31.wav","32.wav","33.wav","34.wav","35.wav","36.wav","37.wav","38.wav","39.wav","40.wav","41.wav","42.wav","43.wav","44.wav","45.wav","46.wav","47.wav","48.wav","49.wav","50.wav","51.wav","52.wav","53.wav","54.wav","55.wav","56.wav","57.wav","58.wav","59.wav","60.wav","61.wav","62.wav","63.wav"};
-	Decimator<OVERSAMPLE, QUALITY> sinDecimator;
+    const std::string wavefiles[64]={"00.wav","01.wav","02.wav","03.wav","04.wav","05.wav","06.wav","07.wav","08.wav","09.wav","10.wav","11.wav","12.wav","13.wav","14.wav","15.wav","16.wav","17.wav","18.wav","19.wav","20.wav","21.wav","22.wav","23.wav","24.wav","25.wav","26.wav","27.wav","28.wav","29.wav","30.wav","31.wav","32.wav","33.wav","34.wav","35.wav","36.wav","37.wav","38.wav","39.wav","40.wav","41.wav","42.wav","43.wav","44.wav","45.wav","46.wav","47.wav","48.wav","49.wav","50.wav","51.wav","52.wav","53.wav","54.wav","55.wav","56.wav","57.wav","58.wav","59.wav","60.wav","61.wav","62.wav","63.wav"};
+	dsp::Decimator<OVERSAMPLE, QUALITY> sinDecimator;
 
-	RCFilter sqrFilter;
+	dsp::RCFilter sqrFilter;
 
 	// For analog detuning effect
 	float pitchSlew = 0.0f;
@@ -63,7 +62,7 @@ struct VoltageControlledOscillator {
     void LoadWaves(){
 
         for(int j=0; j<64; j++){
-            string file_name = plug_directory+wavefiles[j];
+            std::string file_name = plug_directory+wavefiles[j];
             const char *chemin = file_name.c_str();
 
             unsigned int channels;
@@ -73,9 +72,9 @@ struct VoltageControlledOscillator {
 
             //Normalisation
 
-            float max_value = 0.0f;
+            double max_value = 0.0f;
             for(int i = 0; i<256 ; i++){
-                    max_value = max(max_value,abs(pSampleData[i]/2.0));
+                    max_value = std::max(max_value,abs(pSampleData[i]/2.0));
             }
 
             for(int i = 0; i<256 ; i++){
@@ -135,17 +134,17 @@ struct VoltageControlledOscillator {
 
 	    float dif_fr = _wavefront - faded_wavfr;
 	    if(dif_fr>0){
-            _wavefront += min(dif_fr,0.01f);
+            _wavefront += std::min(dif_fr,0.01f);
 	    }
         if(dif_fr<0){
-            _wavefront += max(dif_fr,-0.01f);
+            _wavefront += std::max(dif_fr,-0.01f);
         }
 	    float dif_re = _waverear - faded_wavre;
 	    if(dif_re>0){
-            _waverear += min(dif_re,0.01f);
+            _waverear += std::min(dif_re,0.01f);
 	    }
         if(dif_fr<0){
-            _waverear += max(dif_re,-0.01f);
+            _waverear += std::max(dif_re,-0.01f);
         }
 
 
@@ -172,8 +171,8 @@ struct VoltageControlledOscillator {
             else{
                 buf_waverear[i] = wave[int(_waverear)][i];
             }
-            max_wav_f = max(max_wav_f,abs(buf_wavefront[i]));
-            max_wav_r = max(max_wav_r,abs(buf_waverear[i]));
+            max_wav_f = std::max(max_wav_f,abs(buf_wavefront[i]));
+            max_wav_r = std::max(max_wav_r,abs(buf_waverear[i]));
         }
 
         //RESCALING ->
@@ -433,79 +432,103 @@ struct WCO_Osc : Module {
 	float l_MODE_PARAM;
 	float l_FM_INPUT;
 
-	int lfo_range,autoscale = 0;
+	int lfo_range = 0;
+	int autoscale = 0;
 
-	WCO_Osc() : Module(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS) {
-	srand(time(0));
+	WCO_Osc() {
+		config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
+		configParam(MODE_PARAM, 0.0f, 1.0f, 1.0f);
+        configParam(INVERT_PARAM, 0.0f, 1.0f, 1.0f);
+        configParam(LFO_NOISE_PARAM, 0.0f, 1.0f, 1.0f);
+        configParam(FRONT_PARAM, 0.0f, 1.0f, 0.0f);
+        configParam(WIDTH_PARAM, 0.0f, 1.0f, 0.0f);
+        configParam(REAR_PARAM, 0.0f, 1.0f, 0.0f);
+        configParam(CV_FRONT_PARAM, 0.0f, 1.0f, 0.0f);
+        configParam(CV_WIDTH_PARAM, 0.0f, 1.0f, 0.0f);
+        configParam(CV_REAR_PARAM, 0.0f, 1.0f, 0.0f);
+        configParam(FREQ_PARAM, -54.0f, 54.0f, 0.0f);
+        configParam(FINE_PARAM, -1.0f, 1.0f, 0.0f);
+        configParam(FM_PARAM, 0.0f, 1.0f, 0.0f);
+
+
+
 	}
-	void step() override;
+	void process(const ProcessArgs &args) override;
 };
 
 
-void WCO_Osc::step() {
+void WCO_Osc::process(const ProcessArgs &args)  {
+
+
 
 
 
     if(oscillator.tab_loaded == false){
         oscillator.LoadWaves();
     }
-	float pitchFine = 3.0f * quadraticBipolar(params[FINE_PARAM].value);
-	float pitchCv = 12.0f * inputs[PITCH_INPUT].value;
-	if (inputs[FM_INPUT].active || inputs[FM_INPUT].value != l_FM_INPUT ) {
-		pitchCv += quadraticBipolar(params[FM_PARAM].value) * 12.0f * inputs[FM_INPUT].value;
-	}
-	oscillator.setPitch(params[FREQ_PARAM].value, pitchFine + pitchCv,params[LFO_NOISE_PARAM].value);
-	oscillator.setPulseWidth(0.5f);//oscillator.setPulseWidth(params[PW_PARAM].value + params[WIDTH_PARAM].value * inputs[PW_INPUT].value / 10.0f);
-	if(inputs[SYNK_INPUT].active)
+    float pitchFine = 3.0f * dsp::quadraticBipolar(params[FINE_PARAM].getValue());
+
+
+
+    float pitchCv = 12.0f * inputs[PITCH_INPUT].getVoltage();
+
+
+    if (inputs[FM_INPUT].active || inputs[FM_INPUT].getVoltage() != l_FM_INPUT ) {
+        pitchCv += dsp::quadraticBipolar(params[FM_PARAM].getValue()) * 12.0f * inputs[FM_INPUT].getVoltage();
+    }
+    oscillator.setPitch(params[FREQ_PARAM].getValue(), pitchFine + pitchCv,params[LFO_NOISE_PARAM].getValue());
+    oscillator.setPulseWidth(0.5f);//oscillator.setPulseWidth(params[PW_PARAM].value + params[WIDTH_PARAM].value * inputs[PW_INPUT].value / 10.0f);
+    if(inputs[SYNK_INPUT].active)
         oscillator.syncEnabled = 1;
     else
         oscillator.syncEnabled = 0;
 
 
-    oscillator.setInvert(params[INVERT_PARAM].value);
+    oscillator.setInvert(params[INVERT_PARAM].getValue());
 
 
-    if( (params[WIDTH_PARAM].value != l_WIDTH_PARAM) || (inputs[WIDTH_INPUT].value != l_WIDTH_INPUT) || (params[CV_WIDTH_PARAM].value != l_WIDTH_PARAM) || (params[MODE_PARAM].value != l_MODE_PARAM) ){
-        oscillator.setWidth( params[WIDTH_PARAM].value,(inputs[WIDTH_INPUT].value*params[CV_WIDTH_PARAM].value),params[MODE_PARAM].value) ;
+    if( (params[WIDTH_PARAM].getValue() != l_WIDTH_PARAM) || (inputs[WIDTH_INPUT].getVoltage() != l_WIDTH_INPUT) || (params[CV_WIDTH_PARAM].getValue() != l_WIDTH_PARAM) || (params[MODE_PARAM].getValue() != l_MODE_PARAM) ){
+        oscillator.setWidth( params[WIDTH_PARAM].getValue(),(inputs[WIDTH_INPUT].getVoltage()*params[CV_WIDTH_PARAM].getValue()),params[MODE_PARAM].getValue()) ;
     }
 
-    if( ( params[FRONT_PARAM].value != l_FRONT_PARAM ) || (params[CV_FRONT_PARAM].value != l_CV_FRONT_PARAM ) || (inputs[FRONT_INPUT].value != l_FRONT_INPUT) || ( params[REAR_PARAM].value != l_REAR_PARAM ) || (params[CV_REAR_PARAM].value != l_CV_REAR_PARAM ) || (inputs[REAR_INPUT].value != l_REAR_INPUT) || oscillator.tab_loaded == false ){
-        oscillator.setWaves( params[FRONT_PARAM].value+(params[CV_FRONT_PARAM].value*(inputs[FRONT_INPUT].value/5)),params[REAR_PARAM].value+(params[CV_REAR_PARAM].value*(inputs[REAR_INPUT].value/5)),autoscale);
-	}
+    if( ( params[FRONT_PARAM].getValue() != l_FRONT_PARAM ) || (params[CV_FRONT_PARAM].getValue() != l_CV_FRONT_PARAM ) || (inputs[FRONT_INPUT].getVoltage() != l_FRONT_INPUT) || ( params[REAR_PARAM].getValue() != l_REAR_PARAM ) || (params[CV_REAR_PARAM].getValue() != l_CV_REAR_PARAM ) || (inputs[REAR_INPUT].getVoltage() != l_REAR_INPUT) || oscillator.tab_loaded == false ){
+        oscillator.setWaves( params[FRONT_PARAM].getValue()+(params[CV_FRONT_PARAM].getValue()*(inputs[FRONT_INPUT].getVoltage()/5)),params[REAR_PARAM].getValue()+(params[CV_REAR_PARAM].getValue()*(inputs[REAR_INPUT].getVoltage()/5)),autoscale);
+    }
 
-    oscillator.process(engineGetSampleTime(), inputs[SYNK_INPUT].value);
+    oscillator.process(args.sampleTime, inputs[SYNK_INPUT].getVoltage());
 
-	// Set output
-	if (outputs[OUTPUT].active){
-        if(params[LFO_NOISE_PARAM].value == 1){
-            outputs[OUTPUT].value = clamp (5.0f* oscillator.sin() ,-5.0f,5.0f);
+    // Set output
+    if (outputs[OUTPUT].active){
+        if(params[LFO_NOISE_PARAM].getValue() == 1){
+            outputs[OUTPUT].setVoltage(clamp (5.0f* oscillator.sin() ,-5.0f,5.0f));
         }
         else{
-            if(lfo_range == 1){
-                outputs[OUTPUT].value = clamp ((5.0f * (1+oscillator.sin())),0.0f,10.0f);
+            if(lfo_range == 0){
+
+                outputs[OUTPUT].setVoltage(clamp ((5.0f * oscillator.sin()),-5.0f,5.0f));
             }
-            else{
-               outputs[OUTPUT].value = clamp ((5.0f * oscillator.sin()),-5.0f,5.0f);
+            if(lfo_range == 1){
+                outputs[OUTPUT].setVoltage(clamp ((5.0f * (1+oscillator.sin())),0.0f,10.0f));
             }
 
         }
 
 
-	}
+    }
 
 
-    l_FRONT_PARAM = params[FRONT_PARAM].value;
-	l_WIDTH_PARAM = params[WIDTH_PARAM].value;
-	l_REAR_PARAM = params[REAR_PARAM].value;
-	l_CV_FRONT_PARAM = params[CV_FRONT_PARAM].value;
-	l_CV_REAR_PARAM = params[CV_REAR_PARAM].value;
-	l_CV_WIDTH_PARAM = params[CV_WIDTH_PARAM].value;
-	l_INVERT_PARAM = params[INVERT_PARAM].value;
-	l_FRONT_INPUT = inputs[FRONT_INPUT].value;
-	l_REAR_INPUT = inputs[REAR_INPUT].value;
-	l_WIDTH_INPUT = inputs[WIDTH_INPUT].value;
-	l_MODE_PARAM = params[MODE_PARAM].value;
-	l_FM_INPUT = inputs[FM_INPUT].value;
+    l_FRONT_PARAM = params[FRONT_PARAM].getValue();
+	l_WIDTH_PARAM = params[WIDTH_PARAM].getValue();
+	l_REAR_PARAM = params[REAR_PARAM].getValue();
+	l_CV_FRONT_PARAM = params[CV_FRONT_PARAM].getValue();
+	l_CV_REAR_PARAM = params[CV_REAR_PARAM].getValue();
+	l_CV_WIDTH_PARAM = params[CV_WIDTH_PARAM].getValue();
+	l_INVERT_PARAM = params[INVERT_PARAM].getValue();
+	l_FRONT_INPUT = inputs[FRONT_INPUT].getVoltage();
+	l_REAR_INPUT = inputs[REAR_INPUT].getVoltage();
+	l_WIDTH_INPUT = inputs[WIDTH_INPUT].getVoltage();
+	l_MODE_PARAM = params[MODE_PARAM].getValue();
+	l_FM_INPUT = inputs[FM_INPUT].getVoltage();
 
 
 }
@@ -514,192 +537,197 @@ struct OscDisplay : TransparentWidget {
 	WCO_Osc *module;
 	std::shared_ptr<Font> font;
 	OscDisplay() {
-		//font = Font::load(assetPlugin(plugin, "res/DejaVuSansMono.ttf"));
+		//font = Font::load(assetPlugin(pluginInstance, "res/DejaVuSansMono.ttf"));
 	}
 
-void draw(NVGcontext *vg) override {
-
-
-
-    nvgSave(vg);
-	nvgBeginPath(vg);
-
-    nvgRect(vg, 0,0, 64,56);
-    nvgFillColor(vg, nvgRGBA(17,17,17,255));
-    nvgFill(vg);
-    nvgClosePath(vg);
-    nvgRestore(vg);
-
-    nvgSave(vg);
+    void draw(const DrawArgs &args) override {
+        if(module){
 
 
 
 
-    nvgBeginPath(vg);
-    nvgStrokeColor(vg, nvgRGBA(180,50,50,255));
-    nvgStrokeWidth(vg, 1.5f);
-    for(int i=0;i<=64;i++){
-        int index = i*4;
-        int x = i;
-        float y;
-        if(i==64)
-            y = this->module->oscillator.buf_wavefront[255];
-        else
-            y = this->module->oscillator.buf_wavefront[index];
-        y=y*28;
-        if(i==0){
-            nvgMoveTo(vg, 0, 28-y);
-        }
-        else{
-            nvgLineTo(vg, x, 28-y);
-        }
-    }
-    nvgStroke(vg);
-    nvgClosePath(vg);
+            nvgSave(args.vg);
+            nvgBeginPath(args.vg);
 
-    nvgBeginPath(vg);
-    nvgStrokeColor(vg, nvgRGBA(120,120,255,255));
-    nvgStrokeWidth(vg, 1.5f);
-    for(int i=0;i<=64;i++){
-        int index = i*4;
-        int x = i;
-        float y;
-        if(this->module->l_INVERT_PARAM != 0){
-            if(i==64)
-                y = this->module->oscillator.buf_waverear[255];
-            else
-                y = this->module->oscillator.buf_waverear[255-index];
-        }
-        else{
-            if(i==64)
-                y = this->module->oscillator.buf_waverear[255];
-            else
-                y = this->module->oscillator.buf_waverear[index];
-        }
-        y=y*28;
-        if(i==0){
-            nvgMoveTo(vg, 0, 28-y);
-        }
-        else{
-            nvgLineTo(vg, x, 28-y);
-        }
-    }
-    nvgStroke(vg);
-    nvgClosePath(vg);
+            nvgRect(args.vg, 0,0, 64,56);
+            nvgFillColor(args.vg, nvgRGBA(17,17,17,255));
+            nvgFill(args.vg);
+            nvgClosePath(args.vg);
+            nvgRestore(args.vg);
 
-    nvgBeginPath(vg);
-    nvgStrokeColor(vg, nvgRGBA(200,200,200,255));
-    nvgStrokeWidth(vg, 1.2f);
-    //nvgMoveTo(vg, 0, 28);
-    int al_window = this->module->oscillator.al_window*256;
-    int ar_window = this->module->oscillator.ar_window*256;
-    int bl_window = this->module->oscillator.bl_window*256;
-    int br_window = this->module->oscillator.br_window*256;
+            nvgSave(args.vg);
 
-    for(int i=0;i<=64;i++){
-        int x = i;
-        float y;
-        int index = i*4;
-//INVERT
-        if(this->module->oscillator.invert){
-    //SIMPLE
-               if(this->module->oscillator._dual < 0.5f){
-                    if( (i > al_window/4 and i < ar_window/4) or ( al_window/4 == 0.0f and ar_window/4 == 64.0f)) {
-                        if(i==64){
-                            y = this->module->oscillator.buf_waverear[255];
-                        }
-                        else{
-                            y = this->module->oscillator.buf_waverear[255-index];
-                        }
-                    }
-                    else{
-                         if(i==64)
-                            y = this->module->oscillator.buf_wavefront[255];
-                        else
-                            y = this->module->oscillator.buf_wavefront[index];
-                    }
-               }
-    //DUAL
-               else{
-                    if( (i > al_window/4 and i < ar_window/4) or (i > bl_window/4 and i < br_window/4)or ( al_window/4 == 0.0f and ar_window/4 == 32.0f)) {
-                        if(i==64){
-                            y = this->module->oscillator.buf_waverear[255];
-                        }
-                        else{
-                            y = this->module->oscillator.buf_waverear[255-index];
-                        }
-                    }
-                   else{
-                        if(i==64)
-                            y = this->module->oscillator.buf_wavefront[255];
-                        else
-                            y = this->module->oscillator.buf_wavefront[index];
-                   }
-               }
-            }
-//NORMAL
-            else{
-                if(this->module->oscillator._dual < 0.5f){
-                    if( (i > al_window/4 and i < ar_window/4) or ( al_window/4 == 0.0f and ar_window/4 == 64.0f) ) {
-                            if(i==64)
-                                y = this->module->oscillator.buf_waverear[255];
-                            else
-                                y = this->module->oscillator.buf_waverear[index];
-                    }
-                    else{
-                        if(i==64)
-                                y = this->module->oscillator.buf_wavefront[255];
-                        else
-                                y = this->module->oscillator.buf_wavefront[index];
-                    }
+
+
+
+            nvgBeginPath(args.vg);
+            nvgStrokeColor(args.vg, nvgRGBA(180,50,50,255));
+            nvgStrokeWidth(args.vg, 1.5f);
+            for(int i=0;i<=64;i++){
+                int index = i*4;
+                int x = i;
+                float y;
+                if(i==64)
+                    y = this->module->oscillator.buf_wavefront[255];
+                else
+                    y = this->module->oscillator.buf_wavefront[index];
+                y=y*28;
+                if(i==0){
+                    nvgMoveTo(args.vg, 0, 28-y);
                 }
                 else{
-                    if( (i >= al_window/4 and i < ar_window/4) or (i > bl_window/4 and i <= br_window/4)or ( al_window/4 == 0.0f and ar_window/4 == 32.0f)) {
-                        if(i==64)
-                            y = this->module->oscillator.buf_waverear[255];
-                        else
-                            y = this->module->oscillator.buf_waverear[index];
-                    }
-                   else{
-                        if(i==64)
-                            y = this->module->oscillator.buf_wavefront[255];
-                        else
-                            y = this->module->oscillator.buf_wavefront[index];
-                   }
+                    nvgLineTo(args.vg, x, 28-y);
                 }
             }
-        y=y*28;
-        if(i==0){
-            nvgMoveTo(vg, 0, 28-y);
+            nvgStroke(args.vg);
+            nvgClosePath(args.vg);
+
+            nvgBeginPath(args.vg);
+            nvgStrokeColor(args.vg, nvgRGBA(120,120,255,255));
+            nvgStrokeWidth(args.vg, 1.5f);
+            for(int i=0;i<=64;i++){
+                int index = i*4;
+                int x = i;
+                float y;
+                if(this->module->l_INVERT_PARAM != 0){
+                    if(i==64)
+                        y = this->module->oscillator.buf_waverear[255];
+                    else
+                        y = this->module->oscillator.buf_waverear[255-index];
+                }
+                else{
+                    if(i==64)
+                        y = this->module->oscillator.buf_waverear[255];
+                    else
+                        y = this->module->oscillator.buf_waverear[index];
+                }
+                y=y*28;
+                if(i==0){
+                    nvgMoveTo(args.vg, 0, 28-y);
+                }
+                else{
+                    nvgLineTo(args.vg, x, 28-y);
+                }
+            }
+            nvgStroke(args.vg);
+            nvgClosePath(args.vg);
+
+            nvgBeginPath(args.vg);
+            nvgStrokeColor(args.vg, nvgRGBA(200,200,200,255));
+            nvgStrokeWidth(args.vg, 1.2f);
+            //nvgMoveTo(args.vg, 0, 28);
+            int al_window = this->module->oscillator.al_window*256;
+            int ar_window = this->module->oscillator.ar_window*256;
+            int bl_window = this->module->oscillator.bl_window*256;
+            int br_window = this->module->oscillator.br_window*256;
+
+            for(int i=0;i<=64;i++){
+                int x = i;
+                float y;
+                int index = i*4;
+        //INVERT
+                if(this->module->oscillator.invert){
+            //SIMPLE
+                       if(this->module->oscillator._dual < 0.5f){
+                            if( (i > al_window/4 and i < ar_window/4) or ( al_window/4 == 0.0f and ar_window/4 == 64.0f)) {
+                                if(i==64){
+                                    y = this->module->oscillator.buf_waverear[255];
+                                }
+                                else{
+                                    y = this->module->oscillator.buf_waverear[255-index];
+                                }
+                            }
+                            else{
+                                 if(i==64)
+                                    y = this->module->oscillator.buf_wavefront[255];
+                                else
+                                    y = this->module->oscillator.buf_wavefront[index];
+                            }
+                       }
+            //DUAL
+                       else{
+                            if( (i > al_window/4 and i < ar_window/4) or (i > bl_window/4 and i < br_window/4)or ( al_window/4 == 0.0f and ar_window/4 == 32.0f)) {
+                                if(i==64){
+                                    y = this->module->oscillator.buf_waverear[255];
+                                }
+                                else{
+                                    y = this->module->oscillator.buf_waverear[255-index];
+                                }
+                            }
+                           else{
+                                if(i==64)
+                                    y = this->module->oscillator.buf_wavefront[255];
+                                else
+                                    y = this->module->oscillator.buf_wavefront[index];
+                           }
+                       }
+                    }
+        //NORMAL
+                    else{
+                        if(this->module->oscillator._dual < 0.5f){
+                            if( (i > al_window/4 and i < ar_window/4) or ( al_window/4 == 0.0f and ar_window/4 == 64.0f) ) {
+                                    if(i==64)
+                                        y = this->module->oscillator.buf_waverear[255];
+                                    else
+                                        y = this->module->oscillator.buf_waverear[index];
+                            }
+                            else{
+                                if(i==64)
+                                        y = this->module->oscillator.buf_wavefront[255];
+                                else
+                                        y = this->module->oscillator.buf_wavefront[index];
+                            }
+                        }
+                        else{
+                            if( (i >= al_window/4 and i < ar_window/4) or (i > bl_window/4 and i <= br_window/4)or ( al_window/4 == 0.0f and ar_window/4 == 32.0f)) {
+                                if(i==64)
+                                    y = this->module->oscillator.buf_waverear[255];
+                                else
+                                    y = this->module->oscillator.buf_waverear[index];
+                            }
+                           else{
+                                if(i==64)
+                                    y = this->module->oscillator.buf_wavefront[255];
+                                else
+                                    y = this->module->oscillator.buf_wavefront[index];
+                           }
+                        }
+                    }
+                y=y*28;
+                if(i==0){
+                    nvgMoveTo(args.vg, 0, 28-y);
+                }
+                else{
+                    nvgLineTo(args.vg, x, 28-y);
+                }
+            }
+        nvgLineCap(args.vg, NVG_ROUND);
+        nvgLineJoin(args.vg, NVG_ROUND);
+            nvgStroke(args.vg);
+            nvgClosePath(args.vg);
+
+
+            nvgRestore(args.vg);
         }
-        else{
-            nvgLineTo(vg, x, 28-y);
-        }
+        else
+            return;
+
     }
-nvgLineCap(vg, NVG_ROUND);
-nvgLineJoin(vg, NVG_ROUND);
-    nvgStroke(vg);
-    nvgClosePath(vg);
-
-
-    nvgRestore(vg);
-
-
-}
 };
 
 
 struct WCO_OscWidget : ModuleWidget {
-    Menu *createContextMenu() override;
+    Menu *createContextMenu();
 	WCO_OscWidget(WCO_Osc *module);
 };
 
-WCO_OscWidget::WCO_OscWidget(WCO_Osc *module) : ModuleWidget(module) {
-	setPanel(SVG::load(assetPlugin(plugin, "res/WCO_Osc.svg")));
-	addChild(Widget::create<ScrewSilver>(Vec(15, 0)));
-	addChild(Widget::create<ScrewSilver>(Vec(box.size.x-30, 0)));
-	addChild(Widget::create<ScrewSilver>(Vec(15, 365)));
-	addChild(Widget::create<ScrewSilver>(Vec(box.size.x-30, 365)));
+WCO_OscWidget::WCO_OscWidget(WCO_Osc *module) {
+		setModule(module);
+	setPanel(APP->window->loadSvg(asset::plugin(pluginInstance, "res/WCO_Osc.svg")));
+	addChild(createWidget<ScrewSilver>(Vec(15, 0)));
+	addChild(createWidget<ScrewSilver>(Vec(box.size.x-30, 0)));
+	addChild(createWidget<ScrewSilver>(Vec(15, 365)));
+	addChild(createWidget<ScrewSilver>(Vec(box.size.x-30, 365)));
 
         OscDisplay *display = new OscDisplay();
 		display->module = module;
@@ -708,41 +736,37 @@ WCO_OscWidget::WCO_OscWidget(WCO_Osc *module) : ModuleWidget(module) {
 		addChild(display);
 
 
-	addParam(ParamWidget::create<CKSS>(Vec(15, 48), module, WCO_Osc::MODE_PARAM, 0.0f, 1.0f, 1.0f));
-	addParam(ParamWidget::create<CKSS>(Vec(122, 48), module, WCO_Osc::INVERT_PARAM, 0.0f, 1.0f, 1.0f));
-    addParam(ParamWidget::create<CKSS>(Vec(68.6, 330), module, WCO_Osc::LFO_NOISE_PARAM, 0.0f, 1.0f, 1.0f));
+	addParam(createParam<CKSS>(Vec(15, 48), module, WCO_Osc::MODE_PARAM));
+	addParam(createParam<CKSS>(Vec(122, 48), module, WCO_Osc::INVERT_PARAM));
+    addParam(createParam<CKSS>(Vec(68.6, 330), module, WCO_Osc::LFO_NOISE_PARAM));
 
 
-    addParam(ParamWidget::create<EdgeRedKnob>(Vec(14.8, 211.8), module, WCO_Osc::FRONT_PARAM, 0.0f, 1.0f, 0.0f));
-	addParam(ParamWidget::create<RoundLargeBlackKnob>(Vec(56.5, 187.3), module, WCO_Osc::WIDTH_PARAM, 0.0f, 1.0f, 0.0f));
-	addParam(ParamWidget::create<EdgeBlueKnob>(Vec(108, 211.8), module, WCO_Osc::REAR_PARAM, 0.0f, 1.0f, 0.0f));
-	addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(17.7, 255), module, WCO_Osc::CV_FRONT_PARAM, 0.0f, 1.0f, 0.0f));
-	addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(63.5, 248.5), module, WCO_Osc::CV_WIDTH_PARAM, 0.0f, 1.0f, 0.0f));
-	addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(110.6, 254.8), module, WCO_Osc::CV_REAR_PARAM, 0.0f, 1.0f, 0.0f));
-    addParam(ParamWidget::create<RoundBlackKnob>(Vec(37.5, 101), module, WCO_Osc::FREQ_PARAM, -54.0f, 54.0f, 0.0f));
-    addParam(ParamWidget::create<RoundBlackKnob>(Vec(84.5, 101), module, WCO_Osc::FINE_PARAM, -1.0f, 1.0f, 0.0f));
-	addParam(ParamWidget::create<RoundSmallBlackKnob>(Vec(63.5, 154.1), module, WCO_Osc::FM_PARAM, 0.0f, 1.0f, 0.0f));
+    addParam(createParam<EdgeRedKnob>(Vec(14.8, 211.8), module, WCO_Osc::FRONT_PARAM));
+	addParam(createParam<RoundLargeBlackKnob>(Vec(56.5, 187.3), module, WCO_Osc::WIDTH_PARAM));
+	addParam(createParam<EdgeBlueKnob>(Vec(108, 211.8), module, WCO_Osc::REAR_PARAM));
+	addParam(createParam<RoundSmallBlackKnob>(Vec(17.7, 255), module, WCO_Osc::CV_FRONT_PARAM));
+	addParam(createParam<RoundSmallBlackKnob>(Vec(63.5, 248.5), module, WCO_Osc::CV_WIDTH_PARAM));
+	addParam(createParam<RoundSmallBlackKnob>(Vec(110.6, 254.8), module, WCO_Osc::CV_REAR_PARAM));
+    addParam(createParam<RoundBlackKnob>(Vec(37.5, 101), module, WCO_Osc::FREQ_PARAM));
+    addParam(createParam<RoundBlackKnob>(Vec(84.5, 101), module, WCO_Osc::FINE_PARAM));
+	addParam(createParam<RoundSmallBlackKnob>(Vec(63.5, 154.1), module, WCO_Osc::FM_PARAM));
 
 
-	addInput(Port::create<PJ301MPort>(Vec(30.5, 154.3), Port::INPUT, module, WCO_Osc::FM_INPUT));
-	addInput(Port::create<PJ301MPort>(Vec(95.5, 154.3), Port::INPUT, module, WCO_Osc::SYNK_INPUT));
-	addOutput(Port::create<PJ301MPort>(Vec(110.5, 328), Port::OUTPUT, module, WCO_Osc::OUTPUT));
-	addInput(Port::create<PJ301MPort>(Vec(17.5, 328), Port::INPUT, module, WCO_Osc::PITCH_INPUT));
-    addInput(Port::create<PJ301MPort>(Vec(17.5, 300), Port::INPUT, module, WCO_Osc::FRONT_INPUT));
-	addInput(Port::create<PJ301MPort>(Vec(63, 300), Port::INPUT, module, WCO_Osc::WIDTH_INPUT));
-	addInput(Port::create<PJ301MPort>(Vec(110.5, 300), Port::INPUT, module, WCO_Osc::REAR_INPUT));
+	addInput(createInput<PJ301MPort>(Vec(30.5, 154.3), module, WCO_Osc::FM_INPUT));
+	addInput(createInput<PJ301MPort>(Vec(95.5, 154.3), module, WCO_Osc::SYNK_INPUT));
+	addOutput(createOutput<PJ301MPort>(Vec(110.5, 328), module, WCO_Osc::OUTPUT));
+	addInput(createInput<PJ301MPort>(Vec(17.5, 328), module, WCO_Osc::PITCH_INPUT));
+    addInput(createInput<PJ301MPort>(Vec(17.5, 300), module, WCO_Osc::FRONT_INPUT));
+	addInput(createInput<PJ301MPort>(Vec(63, 300), module, WCO_Osc::WIDTH_INPUT));
+	addInput(createInput<PJ301MPort>(Vec(110.5, 300), module, WCO_Osc::REAR_INPUT));
 }
 
-
+/*
 
 struct WCO_OscItem1 : MenuItem {
 	WCO_Osc *pt_WCO_Osc;
 	void onAction(EventAction &e) override {
 	    pt_WCO_Osc->lfo_range = 0;
-	}
-	void step() override {
-		rightText = pt_WCO_Osc->lfo_range ?  "" : "✔";
-		MenuItem::step();
 	}
 };
 
@@ -751,11 +775,6 @@ struct WCO_OscItem2 : MenuItem {
 	void onAction(EventAction &e) override {
         pt_WCO_Osc->lfo_range = 1;
 	}
-    void step() override {
-		rightText = pt_WCO_Osc->lfo_range ? "✔" : "" ;
-		MenuItem::step();
-	}
-
 };
 
 struct WCO_OscItem3 : MenuItem {
@@ -769,7 +788,7 @@ struct WCO_OscItem3 : MenuItem {
         }
         pt_WCO_Osc->l_CV_FRONT_PARAM = pt_WCO_Osc->l_CV_FRONT_PARAM+0.01;
 	}
-	void step() override {
+	void process(const ProcessArgs &args) override {
 		rightText = pt_WCO_Osc->autoscale ? "✔" : "";
 		MenuItem::step();
 	}
@@ -804,9 +823,9 @@ Menu *WCO_OscWidget::createContextMenu() {
     return menu;
 }
 
+*/
 
 
 
 
-
-Model *modelWCO_Osc = Model::create<WCO_Osc, WCO_OscWidget>("Edge", "WCO_Osc", "WCO_Osc", OSCILLATOR_TAG);
+Model *modelWCO_Osc = createModel<WCO_Osc, WCO_OscWidget>("WCO_Osc");

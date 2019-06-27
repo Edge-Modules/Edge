@@ -1,0 +1,27 @@
+{
+	"slug": "Edge2",
+	"name": "Edge2",
+	"version": "1.0.0",
+	"author": "VCV",
+	"license": "GNU GENERAL PUBLIC LICENSE",
+	"authorEmail": "edgemodules@gmail.com",
+	"sourceUrl": "https://github.com/Edge-Modules/Edge",
+	"modules": [
+		{
+			"slug": "WCO_Osc",
+			"name": "WCO_Osc",
+			"tags": ["WCO_Osc"]
+		},
+		{
+			"slug": "K_Rush",
+			"name": "K_Rush",
+			"tags": ["K_Rush"]
+		},
+		{
+			"slug": "Bad_Haas",
+			"name": "Bad_Haas",
+			"tags": ["Bad_Haas"]
+		}
+		
+	]
+}

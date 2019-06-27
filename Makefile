@@ -1,6 +1,5 @@
 RACK_DIR ?= ../..
-SLUG = Edge
-VERSION = 0.6.5
+
 
 FLAGS += -I./dsp
 

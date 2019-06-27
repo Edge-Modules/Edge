@@ -1,4 +1,4 @@
-#include "rack.hpp"
+#include <rack.hpp>
 
 
 using namespace rack;
@@ -9,8 +9,9 @@ const NVGcolor YELLOW = nvgRGBA(255, 233, 0, 255);
 
 
 
-extern Plugin *plugin;
+extern Plugin *pluginInstance;
 
 extern Model *modelWCO_Osc;
 extern Model *modelK_Rush;
 extern Model *modelBad_Haas;
+extern Model *modelConvolver;
