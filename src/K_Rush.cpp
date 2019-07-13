@@ -1,5 +1,6 @@
 #include "Edge.hpp"
 
+
 #include "dep/dr_wav.h"
 
 
@@ -28,7 +29,7 @@ struct Diode{
     bool tab_loaded = false;
     float out = 0.0f;
     float faded_type = 0.0f;
-    bool first_alg,fft_try = false;
+    bool first_alg = true;
     float l_type = 0;
     float buf_in[BLOCK_SIZE]={0.0f};
     float buf_out[BLOCK_SIZE]={0.0f};
@@ -66,14 +67,14 @@ struct Diode{
     float proc_f_d1(float in, float gain, float type,float feedback){
 
 
-        if(first_alg){
+        if(!first_alg){
             //gain = (gain+1);
 
-            /*
+
             if(tab_loaded == false){
                 LoadWaves();
             }
-
+/*
             in=(in-(feedback*(gain/8.0f)));
             Upsample.process(in,Ov_Buffer);
             filter1.setCutoff((44100 *engineGetSampleTime()/4));
@@ -129,7 +130,7 @@ struct Diode{
 
             in=(in-(feedback*(gain/8.0f)));
             Upsample.process(in,Ov_Buffer);
-            filter1.setCutoff((44100 * (APP->engine->getSampleTime()/4)));
+            filter1.setCutoff((44100 * (APP->engine->getSampleTime())));
             float index = 0.0f;
 
             type = clamp(type, 0.00f,14.99f);
@@ -172,7 +173,7 @@ struct Diode{
 
 
                 Ov_Buffer[i] *= (gain*2.0f);
-                Ov_Buffer[i] = tanh(Ov_Buffer[i]);
+                //Ov_Buffer[i] = tanh(Ov_Buffer[i]);
                 if(phase_in>0.0f)
                     Ov_Buffer[i] = phase_in*Ov_Buffer[i];
                 else
@@ -183,7 +184,7 @@ struct Diode{
 
             }
             in=Decimate.process(Ov_Buffer);//*phase_in;
-            out = clamp(in,-1.0f,1.0f);
+            out = tanh(in);
 
 
             return out ;
@@ -282,98 +283,104 @@ void K_Rush::process(const ProcessArgs &args) {
     float gain = params[GAIN_PARAM].getValue();
 
 
-    float feed_back = clamp((params[FEEDBACK_PARAM].getValue() + (params[CV_FEEDBACK_PARAM].getValue()*inputs[CV_FEEDBACK_INPUT].getVoltage())),0.0f,1.0f)*(inputs[FEEDBACK_INPUT].getVoltage()/5.0f);
+    float feed_back = clamp((params[FEEDBACK_PARAM].getValue() + (params[CV_FEEDBACK_PARAM].getValue()*inputs[CV_FEEDBACK_INPUT].getVoltageSum())),0.0f,1.0f)*(inputs[FEEDBACK_INPUT].getVoltage()/5.0f);
     //float in = (inputs[IN_INPUT].value/5.0f)-((inputs[FEEDBACK_INPUT].value/5.0f)/clamp(16/gain,1.0f,16.0f) *feed_back);
-    float in = (inputs[IN_INPUT].getVoltage()/5.0)*params[TRIM_PARAM].getValue();
+    float in = (inputs[IN_INPUT].getVoltageSum()/5.0)*params[TRIM_PARAM].getValue();
     if(inputs[CV_GAIN_INPUT].active)
-        gain += (inputs[CV_GAIN_INPUT].getVoltage()*params[CV_GAIN_PARAM].getValue());
+        gain += (inputs[CV_GAIN_INPUT].getVoltageSum()*params[CV_GAIN_PARAM].getValue());
 
     gain = clamp(gain,0.0f,8.0f);
     float type_diode = params[WAVET_PARAM].getValue()+(inputs[TYPE_INPUT].getVoltage() * 2.0f);
     in = d_pos.proc_f_d1(in ,gain,type_diode,feed_back);
-    outputs[OUT_OUTPUT].setVoltage((params[MIX_PARAM].getValue()*in*5)+((1-params[MIX_PARAM].getValue())*inputs[IN_INPUT].getVoltage()));
+    outputs[OUT_OUTPUT].setVoltage((params[MIX_PARAM].getValue()*in*5)+((1-params[MIX_PARAM].getValue())*inputs[IN_INPUT].getVoltageSum()));
     outputs[FEEDBACK_OUTPUT].setVoltage(in*5);
 
 
 }
 
+
+
+
+
+
+
 struct K_RushWidget : ModuleWidget {
-    Menu *createContextMenu();
-	K_RushWidget(K_Rush *module);
+    //Menu *createContextMenu();
+	K_RushWidget(K_Rush *module){
+        setModule(module);
+        setPanel(APP->window->loadSvg(asset::plugin(pluginInstance, "res/K_Rush.svg")));
 
+        //addParam(createParamWidget<RoundSmallBlackKnob>(Vec(15.2, 85.5), module, K_Rush::TRIM_PARAM, -4.0f, 4.0f, 1.0f));
+        addParam(createParam<RoundSmallBlackKnob>(Vec(15.2, 85.5), module, K_Rush::TRIM_PARAM));
+
+        addParam(createParam<RoundBlackKnob>(Vec(60.5, 82.8), module, K_Rush::WAVET_PARAM));
+        addParam(createParam<RoundSmallBlackKnob>(Vec(110.9, 85.5), module, K_Rush::MIX_PARAM));
+
+        addParam(createParam<RoundLargeBlackKnob>(Vec(12.2, 158.7), module, K_Rush::GAIN_PARAM));
+        addParam(createParam<RoundLargeBlackKnob>(Vec(100, 256.7), module, K_Rush::FEEDBACK_PARAM));
+
+        addParam(createParam<RoundSmallBlackKnob>(Vec(106.9, 165.7), module, K_Rush::CV_GAIN_PARAM));
+        addParam(createParam<RoundSmallBlackKnob>(Vec(19.3, 263.8), module, K_Rush::CV_FEEDBACK_PARAM));
+
+        addInput(createInput<PJ301MPort>(Vec(62.3, 125),  module, K_Rush::TYPE_INPUT));
+        addInput(createInput<PJ301MPort>(Vec(62.3, 205),  module, K_Rush::CV_GAIN_INPUT));
+        addInput(createInput<PJ301MPort>(Vec(62.3, 302.6), module, K_Rush::CV_FEEDBACK_INPUT));
+
+        addInput(createInput<PJ301MPort>(Vec(9.3, 345), module, K_Rush::FEEDBACK_INPUT));
+        addInput(createInput<PJ301MPort>(Vec(62.3, 345), module, K_Rush::IN_INPUT));
+        addOutput(createOutput<PJ301MPort>(Vec(115.3, 345), module, K_Rush::OUT_OUTPUT));
+
+
+        }
+
+
+        struct AlgoSelecItem : MenuItem {
+            K_Rush *pt_kr;
+            void onAction(const event::Action &e) override {
+
+                    pt_kr->d_pos.first_alg = true;
+            }
+            void step() override {
+                rightText = (pt_kr->d_pos.first_alg == true) ? "✔" : "";
+                MenuItem::step();
+            }
+        };
+
+        struct AlgoSelecItem2 : MenuItem {
+            K_Rush *pt_kr;
+            void onAction(const event::Action &e) override {
+
+                    pt_kr->d_pos.first_alg = false;
+            }
+            void step() override {
+                rightText = (pt_kr->d_pos.first_alg == false) ? "✔" : "";
+                MenuItem::step();
+            }
+        };
+
+        void appendContextMenu(Menu *menu) override{
+            K_Rush *pt_kr = dynamic_cast<K_Rush*>(module);
+            //assert(pt_kr);
+            if( pt_kr){
+                menu->addChild(construct<MenuEntry>());
+                //menu->addChild(construct<MenuLabel>(&MenuLabel::text, "Not so blank panels"));
+                menu->addChild(construct<AlgoSelecItem>(&AlgoSelecItem::text, "1rst Algo",&AlgoSelecItem::pt_kr,pt_kr));
+                menu->addChild(construct<AlgoSelecItem2>(&AlgoSelecItem2::text, "2nd Algo",&AlgoSelecItem2::pt_kr,pt_kr));
+            }
+
+
+
+        }
 };
 
 
-K_RushWidget ::K_RushWidget(K_Rush *module) {
-		setModule(module);
-    setPanel(APP->window->loadSvg(asset::plugin(pluginInstance, "res/K_Rush.svg")));
-
-    //addParam(createParamWidget<RoundSmallBlackKnob>(Vec(15.2, 85.5), module, K_Rush::TRIM_PARAM, -4.0f, 4.0f, 1.0f));
-    addParam(createParam<RoundSmallBlackKnob>(Vec(15.2, 85.5), module, K_Rush::TRIM_PARAM));
-
-    addParam(createParam<RoundBlackKnob>(Vec(60.5, 82.8), module, K_Rush::WAVET_PARAM));
-    addParam(createParam<RoundSmallBlackKnob>(Vec(110.9, 85.5), module, K_Rush::MIX_PARAM));
-
-    addParam(createParam<RoundLargeBlackKnob>(Vec(12.2, 158.7), module, K_Rush::GAIN_PARAM));
-    addParam(createParam<RoundLargeBlackKnob>(Vec(100, 256.7), module, K_Rush::FEEDBACK_PARAM));
-
-    addParam(createParam<RoundSmallBlackKnob>(Vec(106.9, 165.7), module, K_Rush::CV_GAIN_PARAM));
-    addParam(createParam<RoundSmallBlackKnob>(Vec(19.3, 263.8), module, K_Rush::CV_FEEDBACK_PARAM));
-
-    addInput(createInput<PJ301MPort>(Vec(62.3, 125),  module, K_Rush::TYPE_INPUT));
-    addInput(createInput<PJ301MPort>(Vec(62.3, 205),  module, K_Rush::CV_GAIN_INPUT));
-    addInput(createInput<PJ301MPort>(Vec(62.3, 302.6), module, K_Rush::CV_FEEDBACK_INPUT));
-
-    addInput(createInput<PJ301MPort>(Vec(9.3, 345), module, K_Rush::FEEDBACK_INPUT));
-    addInput(createInput<PJ301MPort>(Vec(62.3, 345), module, K_Rush::IN_INPUT));
-    addOutput(createOutput<PJ301MPort>(Vec(115.3, 345), module, K_Rush::OUT_OUTPUT));
-
-
-
-};
-/*
-struct K_RushItem1 : MenuItem {
-	K_Rush *pt_K_Rush;
-	void onAction(event::Action &e) {
-	    if(pt_K_Rush->d_pos.first_alg == false){
-            pt_K_Rush->d_pos.first_alg = true;
-            pt_K_Rush->d_pos.fft_try = false;
-	    }
-	    else{
-            pt_K_Rush->d_pos.first_alg = false;
-	    }
-
-	}
-	void process(const ProcessArgs &args) {
-		rightText = pt_K_Rush->d_pos.first_alg ? "✔" : "";
-		MenuItem::step();
-	}
-};
-
-
-
-Menu *K_RushWidget::createContextMenu() {
-    Menu *menu;
-    ModuleWidget::createContextMenu();
-
-    MenuLabel *spacerLabel;;
-    menu->addChild(spacerLabel);
-
-    K_Rush *pt_K_Rush = dynamic_cast<K_Rush*>(module);
-    assert(pt_K_Rush);
-
-    K_RushItem1 *Range1 = new K_RushItem1();
-    Range1->text = "1rst Algo.";
-    Range1->pt_K_Rush = pt_K_Rush;
-    menu->addChild(Range1);
 
 
 
 
-    return menu;
-}
 
-*/
+
+
 Model *modelK_Rush = createModel<K_Rush, K_RushWidget>("K_Rush");
 
 

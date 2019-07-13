@@ -72,7 +72,7 @@ void Bad_Haas::process(const ProcessArgs &args)  {
     float dry_wet = clamp(params[DRY_WET].getValue()+((inputs[IN_DRY_WET].getVoltage()/5.0f)*params[CV_DRY_WET].getValue()),-1.0f,1.0f);
 
     if(index==2048){index=0;}
-    Delay_buff[index]= inputs[INPUT].getVoltage() ;
+    Delay_buff[index]= inputs[INPUT].getVoltageSum() ;
 
     // LEFT / RIGHT PART
     float panningLR = clamp(params[DELAY_LR].getValue()+((inputs[CV_DELAY_LR].getVoltage()/5.0f)*params[CV_DELAY_LR].getValue()),-1.0f,1.0f);
@@ -109,8 +109,8 @@ void Bad_Haas::process(const ProcessArgs &args)  {
     float dry = (2-(dry_wet+1))/2.0f;
     float wet = (dry_wet+1)/2.0f;
 
-    float out__l = dry*inputs[INPUT].getVoltage() + wet*interpolateLinear(Delay_buff,temp_l);//+(interpolateLinear(Delay_buff,temp_l2)*0.4f);
-    float out__r = dry*inputs[INPUT].getVoltage() + wet*interpolateLinear(Delay_buff,temp_r);//+(interpolateLinear(Delay_buff,temp_r2)*0.4f);
+    float out__l = dry*inputs[INPUT].getVoltageSum() + wet*interpolateLinear(Delay_buff,temp_l);//+(interpolateLinear(Delay_buff,temp_l2)*0.4f);
+    float out__r = dry*inputs[INPUT].getVoltageSum() + wet*interpolateLinear(Delay_buff,temp_r);//+(interpolateLinear(Delay_buff,temp_r2)*0.4f);
 
     // ---------------------------------------------
 
