@@ -15,10 +15,10 @@ using namespace std;
 
 template <int OVERSAMPLE, int QUALITY>
 struct VoltageControlledOscillator {
-    float poly_sync_val[4] = {0.0f};
-	float lastSyncValue[4] = {0.0f};
-	float phase[4] = {0.0f};
-	float freq[4]={0.0f};
+    float poly_sync_val[16] = {0.0f};
+	float lastSyncValue[16] = {0.0f};
+	float phase[16] = {0.0f};
+	float freq[16]={0.0f};
 	float pw = 0.6f;
 	float pitch;
 	//
@@ -41,28 +41,28 @@ struct VoltageControlledOscillator {
     float mid_phase = 0.0f;
 	float buf_wavefront[256]={0};
 	float buf_waverear[256]={0};
-	float buf_final[4][257]={0};
+	float buf_final[257]={0};
 
 
-    dsp::Decimator<OVERSAMPLE, QUALITY> sinDecimator[4];
+    dsp::Decimator<OVERSAMPLE, QUALITY> sinDecimator[16];
 
-	dsp::RCFilter sqrFilter[4];
+	dsp::RCFilter sqrFilter[16];
 
 	// For analog detuning effect
 	float pitchSlew = 0.0f;
 	int pitchSlewIndex = 0;
 
-	float sinBuffer[4][OVERSAMPLE] = {0.0f};
+	float sinBuffer[16][OVERSAMPLE] = {0.0f};
 
     //Poly
-    float pitchCv[4]={0.0f};
+    float pitchCv[16]={0.0f};
 
 
 
 
 // Il va falloir clamp PITCH !
 
-	void setPitch(float pitchKnob, float pitchCv[4], float _lfo_param) {
+	void setPitch(float pitchKnob, float pitchCv[16], float _lfo_param, int channels) {
 		// Compute frequency
 		pitch = pitchKnob;
 		/*if (analog) {
@@ -76,7 +76,7 @@ struct VoltageControlledOscillator {
 			pitch = roundf(pitch);
 		//}
 
-		for(int i=0;i<4;i++){
+		for(int i=0;i<channels;i++){
             //pitch += pitchCv;
             // Note C4
             freq[i] = 261.626f * powf(2.0f, (pitch+pitchCv[i]) / 12.0f);
@@ -195,8 +195,8 @@ struct VoltageControlledOscillator {
 	void process(float deltaTime, float syncValue, int channels) {
 
 
-
-        float deltaPhase[4] = {0.0f};
+         int syncIndex = -1; // Index in the oversample loop where sync occurs [0, OVERSAMPLE)
+        float deltaPhase[channels] = {0.0f};
 
         for(int k=0;k<channels;k++){
             //poly_sync_val[k] = syncValue;
@@ -204,7 +204,7 @@ struct VoltageControlledOscillator {
             deltaPhase[k] = clamp(freq[k] * deltaTime, 1e-6, 0.5f);
 
             // Detect sync
-            int syncIndex = -1; // Index in the oversample loop where sync occurs [0, OVERSAMPLE)
+           // int syncIndex = -1; // Index in the oversample loop where sync occurs [0, OVERSAMPLE)
             float syncCrossing = 0.0f; // Offset that sync occurs [0.0f, 1.0f)
             if (syncEnabled) {
                 poly_sync_val[k] -= 0.01f;
@@ -225,114 +225,114 @@ struct VoltageControlledOscillator {
                 deltaPhase[k] *= -1.0f;
 
 
+        }
 
+        int i = int(phase[0]*255)+3;
+        if(i>=255.0f){
+            i -= 255.0f;
+        }
 
-            int i = int(phase[k]*255)+3;
-            if(i>=255.0f){
-                i -= 255.0f;
-            }
-
-                if(invert){
-                   if(_dual < 0.5f){
-                        if( (phase[k] > al_window and phase[k] < ar_window) or (al_window == 0.0f) ) {
-                            if(i==255){
-                                buf_final[k][i] = (buf_waverear[0]+buf_waverear[255])/2;
-                            }
-                            else{
-                                if(phase[k]==al_window or  phase[k]==ar_window){
-                                    buf_final[k][i] = (buf_waverear[255-i]+buf_wavefront[i])/2;
-                                }
-                                else{
-                                    buf_final[k][i] = buf_waverear[255-i];
-                                }
-                            }
+            if(invert){
+               if(_dual < 0.5f){
+                    if( (phase[0] > al_window and phase[0] < ar_window) or (al_window == 0.0f) ) {
+                        if(i==255){
+                            buf_final[i] = (buf_waverear[0]+buf_waverear[255])/2;
                         }
                         else{
-                            if(i==255){
-                                buf_final[k][i] = (buf_wavefront[0]+buf_wavefront[255])/2;
+                            if(phase[0]==al_window or  phase[0]==ar_window){
+                                buf_final[i] = (buf_waverear[255-i]+buf_wavefront[i])/2;
                             }
                             else{
-                                buf_final[k][i] = buf_wavefront[i];
-                            }
-                        }
-                   }
-                   else{
-                        if( (phase[k] > al_window and phase[k] < ar_window) or (phase[k] > bl_window and phase[k] < br_window) or ( al_window == 0.0f and ar_window == 0.5f)) {
-                            if(i==255){
-                                buf_final[k][i] = (buf_waverear[0] + buf_waverear[255])/2;
-                            }
-                            else{
-                                if(phase[k]==al_window or  phase[k]==ar_window){
-                                    buf_final[k][i] = (buf_waverear[255-i]+buf_wavefront[i])/2;
-                                }
-                                else{
-                                    buf_final[k][i] = buf_waverear[255-i];
-                                }
-                            }
-                        }
-                       else{
-                            if(i==255){
-                                buf_final[k][i] = (buf_wavefront[0]+buf_wavefront[255])/2;
-                            }
-                            else{
-                                buf_final[k][i] = buf_wavefront[i];
-                            }
-                       }
-                   }
-                }
-                else{
-                    if(_dual < 0.5f){
-                        if((phase[k] > al_window and phase[k] < ar_window) or (al_window == 0.0f and ar_window == 1.0f)) {
-                            if(i==255){
-                                buf_final[k][i] = (buf_waverear[0]+buf_waverear[255])/2;
-                            }
-                            else{
-                                if(phase[k]==al_window or  phase[k]==ar_window){
-                                    buf_final[k][i] = (buf_waverear[i]+buf_wavefront[i])/2;
-                                }
-                                else{
-                                    buf_final[k][i] = buf_waverear[i];
-                                }
-                            }
-                        }
-                        else{
-                            if(i==255){
-                                buf_final[k][i] = (buf_wavefront[0]+buf_wavefront[255])/2;
-                            }
-                            else{
-                                buf_final[k][i] = buf_wavefront[i];
+                                buf_final[i] = buf_waverear[255-i];
                             }
                         }
                     }
                     else{
-                        if( (phase[k] > al_window and phase[k] < ar_window) or (phase[k] > bl_window and phase[k] < br_window) or ( al_window == 0.0f and ar_window == 1.0f)) {
-                            if(i==255){
-                                buf_final[k][i] = (buf_waverear[0]+buf_waverear[255])/2;
+                        if(i==255){
+                            buf_final[i] = (buf_wavefront[0]+buf_wavefront[255])/2;
+                        }
+                        else{
+                            buf_final[i] = buf_wavefront[i];
+                        }
+                    }
+               }
+               else{
+                    if( (phase[0] > al_window and phase[0] < ar_window) or (phase[0] > bl_window and phase[0] < br_window) or ( al_window == 0.0f and ar_window == 0.5f)) {
+                        if(i==255){
+                            buf_final[i] = (buf_waverear[0] + buf_waverear[255])/2;
+                        }
+                        else{
+                            if(phase[0]==al_window or  phase[0]==ar_window){
+                                buf_final[i] = (buf_waverear[255-i]+buf_wavefront[i])/2;
                             }
                             else{
-                                if(phase[k]==al_window or  phase[k]==ar_window){
-                                    buf_final[k][i] = (buf_waverear[i]+buf_wavefront[i])/2;
-                                }
-                                else{
-                                    buf_final[k][i] = buf_waverear[i];
-                                }
+                                buf_final[i] = buf_waverear[255-i];
                             }
                         }
-                       else{
-                            if(i==255){
-                                buf_final[k][i] = (buf_wavefront[0]+buf_wavefront[255])/2;
+                    }
+                   else{
+                        if(i==255){
+                            buf_final[i] = (buf_wavefront[0]+buf_wavefront[255])/2;
+                        }
+                        else{
+                            buf_final[i] = buf_wavefront[i];
+                        }
+                   }
+               }
+            }
+            else{
+                if(_dual < 0.5f){
+                    if((phase[0] > al_window and phase[0] < ar_window) or (al_window == 0.0f and ar_window == 1.0f)) {
+                        if(i==255){
+                            buf_final[i] = (buf_waverear[0]+buf_waverear[255])/2;
+                        }
+                        else{
+                            if(phase[0]==al_window or  phase[0]==ar_window){
+                                buf_final[i] = (buf_waverear[i]+buf_wavefront[i])/2;
                             }
                             else{
-                                buf_final[k][i] = buf_wavefront[i];
+                                buf_final[i] = buf_waverear[i];
                             }
-                       }
+                        }
+                    }
+                    else{
+                        if(i==255){
+                            buf_final[i] = (buf_wavefront[0]+buf_wavefront[255])/2;
+                        }
+                        else{
+                            buf_final[i] = buf_wavefront[i];
+                        }
                     }
                 }
+                else{
+                    if( (phase[0] > al_window and phase[0] < ar_window) or (phase[0] > bl_window and phase[0] < br_window) or ( al_window == 0.0f and ar_window == 1.0f)) {
+                        if(i==255){
+                            buf_final[i] = (buf_waverear[0]+buf_waverear[255])/2;
+                        }
+                        else{
+                            if(phase[0]==al_window or  phase[0]==ar_window){
+                                buf_final[i] = (buf_waverear[i]+buf_wavefront[i])/2;
+                            }
+                            else{
+                                buf_final[i] = buf_waverear[i];
+                            }
+                        }
+                    }
+                   else{
+                        if(i==255){
+                            buf_final[i] = (buf_wavefront[0]+buf_wavefront[255])/2;
+                        }
+                        else{
+                            buf_final[i] = buf_wavefront[i];
+                        }
+                   }
+                }
+            }
             //}
 
 
 
-
+        for(int k=0;k<channels;k++){
             sqrFilter[k].setCutoff(44100.0f * deltaTime);
 
             for (int j = 0; j < OVERSAMPLE; j++) {
@@ -341,7 +341,7 @@ struct VoltageControlledOscillator {
                 }
 
                 // Advance phase
-                sinBuffer[k][j]= interpolateLinear(buf_final[k], phase[k]*255.0f) ;
+                sinBuffer[k][j]= interpolateLinear(buf_final, phase[k]*255.0f) ;
                 sqrFilter[k].process(sinBuffer[k][j]);
                 sinBuffer[k][j]=sqrFilter[k].lowpass();
                 phase[k] += deltaPhase[k] / OVERSAMPLE;
@@ -431,7 +431,7 @@ struct WCO_Osc : Module {
 
 
 	//Poly
-	float pitchCv[4]={0.0f};
+	float pitchCv[16]={0.0f};
 
 	WCO_Osc() {
 		config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
@@ -453,6 +453,23 @@ struct WCO_Osc : Module {
 	}
 	void process(const ProcessArgs &args) override;
 	void LoadWaves();
+
+
+    json_t *dataToJson() override {
+		json_t *rootJ = json_object();
+		json_object_set_new(rootJ, "lfo_range", json_integer(lfo_range));
+		return rootJ;
+	}
+
+	void dataFromJson(json_t *rootJ) override {
+		json_t *lfo_rangeJ = json_object_get(rootJ, "lfo_range");
+		if (lfo_rangeJ)
+			lfo_range = json_integer_value(lfo_rangeJ);
+	}
+
+
+
+
 };
 
 //LOADWAVE
@@ -517,7 +534,7 @@ void WCO_Osc::process(const ProcessArgs &args)  {
 
     }
 
-    oscillator.setPitch(params[FREQ_PARAM].getValue(), pitchCv,params[LFO_NOISE_PARAM].getValue());
+    oscillator.setPitch(params[FREQ_PARAM].getValue(), pitchCv,params[LFO_NOISE_PARAM].getValue(),channels);
     oscillator.setPulseWidth(0.5f);//oscillator.setPulseWidth(params[PW_PARAM].value + params[WIDTH_PARAM].value * inputs[PW_INPUT].value / 10.0f);
     if(inputs[SYNK_INPUT].isConnected())
         oscillator.syncEnabled = 1;
@@ -758,65 +775,88 @@ struct OscDisplay : TransparentWidget {
 
 
 struct WCO_OscWidget : ModuleWidget {
-    Menu *createContextMenu();
-	WCO_OscWidget(WCO_Osc *module);
-};
 
-WCO_OscWidget::WCO_OscWidget(WCO_Osc *module) {
-		setModule(module);
-	setPanel(APP->window->loadSvg(asset::plugin(pluginInstance, "res/WCO_Osc.svg")));
-	addChild(createWidget<ScrewSilver>(Vec(15, 0)));
-	addChild(createWidget<ScrewSilver>(Vec(box.size.x-30, 0)));
-	addChild(createWidget<ScrewSilver>(Vec(15, 365)));
-	addChild(createWidget<ScrewSilver>(Vec(box.size.x-30, 365)));
+
+    WCO_OscWidget(WCO_Osc *module) {
+        setModule(module);
+        setPanel(APP->window->loadSvg(asset::plugin(pluginInstance, "res/WCO_Osc.svg")));
+        addChild(createWidget<ScrewSilver>(Vec(15, 0)));
+        addChild(createWidget<ScrewSilver>(Vec(box.size.x-30, 0)));
+        addChild(createWidget<ScrewSilver>(Vec(15, 365)));
+        addChild(createWidget<ScrewSilver>(Vec(box.size.x-30, 365)));
 
         OscDisplay *display = new OscDisplay();
-		display->module = module;
-		display->box.pos = Vec(43.0f, 32.0f);
-		display->box.size = Vec(110.0f, 68.0f);
-		addChild(display);
+        display->module = module;
+        display->box.pos = Vec(43.0f, 32.0f);
+        display->box.size = Vec(110.0f, 68.0f);
+        addChild(display);
 
 
-	addParam(createParam<CKSS>(Vec(15, 48), module, WCO_Osc::MODE_PARAM));
-	addParam(createParam<CKSS>(Vec(122, 48), module, WCO_Osc::INVERT_PARAM));
-    addParam(createParam<CKSS>(Vec(68.6, 330), module, WCO_Osc::LFO_NOISE_PARAM));
+        addParam(createParam<CKSS>(Vec(15, 48), module, WCO_Osc::MODE_PARAM));
+        addParam(createParam<CKSS>(Vec(122, 48), module, WCO_Osc::INVERT_PARAM));
+        addParam(createParam<CKSS>(Vec(68.6, 330), module, WCO_Osc::LFO_NOISE_PARAM));
 
 
-    addParam(createParam<EdgeRedKnob>(Vec(14.8, 211.8), module, WCO_Osc::FRONT_PARAM));
-	addParam(createParam<RoundLargeBlackKnob>(Vec(56.5, 187.3), module, WCO_Osc::WIDTH_PARAM));
-	addParam(createParam<EdgeBlueKnob>(Vec(108, 211.8), module, WCO_Osc::REAR_PARAM));
-	addParam(createParam<RoundSmallBlackKnob>(Vec(17.7, 255), module, WCO_Osc::CV_FRONT_PARAM));
-	addParam(createParam<RoundSmallBlackKnob>(Vec(63.5, 248.5), module, WCO_Osc::CV_WIDTH_PARAM));
-	addParam(createParam<RoundSmallBlackKnob>(Vec(110.6, 254.8), module, WCO_Osc::CV_REAR_PARAM));
-    addParam(createParam<RoundBlackKnob>(Vec(37.5, 101), module, WCO_Osc::FREQ_PARAM));
-    addParam(createParam<RoundBlackKnob>(Vec(84.5, 101), module, WCO_Osc::FINE_PARAM));
-	addParam(createParam<RoundSmallBlackKnob>(Vec(63.5, 154.1), module, WCO_Osc::FM_PARAM));
+        addParam(createParam<EdgeRedKnob>(Vec(14.8, 211.8), module, WCO_Osc::FRONT_PARAM));
+        addParam(createParam<RoundLargeBlackKnob>(Vec(56.5, 187.3), module, WCO_Osc::WIDTH_PARAM));
+        addParam(createParam<EdgeBlueKnob>(Vec(108, 211.8), module, WCO_Osc::REAR_PARAM));
+        addParam(createParam<RoundSmallBlackKnob>(Vec(17.7, 255), module, WCO_Osc::CV_FRONT_PARAM));
+        addParam(createParam<RoundSmallBlackKnob>(Vec(63.5, 248.5), module, WCO_Osc::CV_WIDTH_PARAM));
+        addParam(createParam<RoundSmallBlackKnob>(Vec(110.6, 254.8), module, WCO_Osc::CV_REAR_PARAM));
+        addParam(createParam<RoundBlackKnob>(Vec(37.5, 101), module, WCO_Osc::FREQ_PARAM));
+        addParam(createParam<RoundBlackKnob>(Vec(84.5, 101), module, WCO_Osc::FINE_PARAM));
+        addParam(createParam<RoundSmallBlackKnob>(Vec(63.5, 154.1), module, WCO_Osc::FM_PARAM));
 
 
-	addInput(createInput<PJ301MPort>(Vec(30.5, 154.3), module, WCO_Osc::FM_INPUT));
-	addInput(createInput<PJ301MPort>(Vec(95.5, 154.3), module, WCO_Osc::SYNK_INPUT));
-	addOutput(createOutput<PJ301MPort>(Vec(110.5, 328), module, WCO_Osc::OUTPUT));
-	addInput(createInput<PJ301MPort>(Vec(17.5, 328), module, WCO_Osc::PITCH_INPUT));
-    addInput(createInput<PJ301MPort>(Vec(17.5, 300), module, WCO_Osc::FRONT_INPUT));
-	addInput(createInput<PJ301MPort>(Vec(63, 300), module, WCO_Osc::WIDTH_INPUT));
-	addInput(createInput<PJ301MPort>(Vec(110.5, 300), module, WCO_Osc::REAR_INPUT));
-}
+        addInput(createInput<PJ301MPort>(Vec(30.5, 154.3), module, WCO_Osc::FM_INPUT));
+        addInput(createInput<PJ301MPort>(Vec(95.5, 154.3), module, WCO_Osc::SYNK_INPUT));
+        addOutput(createOutput<PJ301MPort>(Vec(110.5, 328), module, WCO_Osc::OUTPUT));
+        addInput(createInput<PJ301MPort>(Vec(17.5, 328), module, WCO_Osc::PITCH_INPUT));
+        addInput(createInput<PJ301MPort>(Vec(17.5, 300), module, WCO_Osc::FRONT_INPUT));
+        addInput(createInput<PJ301MPort>(Vec(63, 300), module, WCO_Osc::WIDTH_INPUT));
+        addInput(createInput<PJ301MPort>(Vec(110.5, 300), module, WCO_Osc::REAR_INPUT));
+    }
+
+    struct LfoRange0 : MenuItem {
+        WCO_Osc *pt_WCO_Osc;
+        void onAction(const event::Action &e) override {
+
+                pt_WCO_Osc->lfo_range = 0;
+        }
+        void step() override {
+            rightText = (pt_WCO_Osc->lfo_range == 0) ? "✔" : "";
+            MenuItem::step();
+        }
+    };
+
+    struct LfoRange1 : MenuItem {
+        WCO_Osc *pt_WCO_Osc;
+        void onAction(const event::Action &e) override {
+
+                pt_WCO_Osc->lfo_range = 1;
+        }
+        void step() override {
+            rightText = (pt_WCO_Osc->lfo_range == 1) ? "✔" : "";
+            MenuItem::step();
+        }
+    };
+
+    void appendContextMenu(Menu *menu) override{
+            WCO_Osc *pt_WCO_Osc = dynamic_cast<WCO_Osc*>(module);
+            //assert(pt_kr);
+            if( pt_WCO_Osc){
+                menu->addChild(construct<MenuEntry>());
+                //menu->addChild(construct<MenuLabel>(&MenuLabel::text, "Not so blank panels"));
+                menu->addChild(construct<LfoRange0>(&LfoRange0::text, "LFO Range -5V / 5V",&LfoRange0::pt_WCO_Osc,pt_WCO_Osc));
+                menu->addChild(construct<LfoRange1>(&LfoRange1::text, "LFO Range 0V / 10V",&LfoRange1::pt_WCO_Osc,pt_WCO_Osc));
+            }
+    }
+};
+
+
 
 /*
 
-struct WCO_OscItem1 : MenuItem {
-	WCO_Osc *pt_WCO_Osc;
-	void onAction(EventAction &e) override {
-	    pt_WCO_Osc->lfo_range = 0;
-	}
-};
-
-struct WCO_OscItem2 : MenuItem {
-	WCO_Osc *pt_WCO_Osc;
-	void onAction(EventAction &e) override {
-        pt_WCO_Osc->lfo_range = 1;
-	}
-};
 
 struct WCO_OscItem3 : MenuItem {
 	WCO_Osc *pt_WCO_Osc;
@@ -837,32 +877,6 @@ struct WCO_OscItem3 : MenuItem {
 
 
 
-Menu *WCO_OscWidget::createContextMenu() {
-    Menu *menu = ModuleWidget::createContextMenu();
-
-    MenuLabel *spacerLabel = new MenuLabel();
-    menu->addChild(spacerLabel);
-
-    WCO_Osc *pt_WCO_Osc = dynamic_cast<WCO_Osc*>(module);
-    assert(pt_WCO_Osc);
-
-    WCO_OscItem1 *Range1 = new WCO_OscItem1();
-    Range1->text = "LFO Range -5 / 5 V";
-    Range1->pt_WCO_Osc = pt_WCO_Osc;
-    menu->addChild(Range1);
-
-    WCO_OscItem2 *Range2 = new WCO_OscItem2();
-    Range2->text = "LFO Range 0 /  10 V";
-    Range2->pt_WCO_Osc = pt_WCO_Osc;
-    menu->addChild(Range2);
-
-    WCO_OscItem3 *AutoScale = new WCO_OscItem3();
-    AutoScale->text = "Autoscale";
-    AutoScale->pt_WCO_Osc = pt_WCO_Osc;
-    menu->addChild(AutoScale);
-
-    return menu;
-}
 
 */
 

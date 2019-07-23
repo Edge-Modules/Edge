@@ -271,6 +271,21 @@ struct K_Rush : Module {
 	// - toJson, fromJson: serialization of internal data
 	// - onSampleRateChange: event triggered by a change of sample rate
 	// - onReset, onRandomize, onCreate, onDelete: implements special behavior when user clicks these from the context menu
+
+    json_t *dataToJson() override {
+		json_t *rootJ = json_object();
+		json_object_set_new(rootJ, "first_alg", json_integer(d_pos.first_alg));
+		return rootJ;
+	}
+
+	void dataFromJson(json_t *rootJ) override {
+		json_t *first_algJ = json_object_get(rootJ, "first_alg");
+		if (d_pos.first_alg)
+			d_pos.first_alg = json_integer_value(first_algJ);
+	}
+
+
+
 };
 
 
