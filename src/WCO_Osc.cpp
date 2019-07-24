@@ -52,7 +52,7 @@ struct VoltageControlledOscillator {
 	float pitchSlew = 0.0f;
 	int pitchSlewIndex = 0;
 
-	float sinBuffer[16][OVERSAMPLE] = {0.0f};
+	float sinBuffer[16][OVERSAMPLE] = {{0.0f}};
 
     //Poly
     float pitchCv[16]={0.0f};
@@ -196,7 +196,7 @@ struct VoltageControlledOscillator {
 
 
          int syncIndex = -1; // Index in the oversample loop where sync occurs [0, OVERSAMPLE)
-        float deltaPhase[channels] = {0.0f};
+        float deltaPhase[channels];
 
         for(int k=0;k<channels;k++){
             //poly_sync_val[k] = syncValue;
