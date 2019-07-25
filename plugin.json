@@ -4,7 +4,7 @@
 	"version": "1.0.1",
 	"brand": "VCV",
 	"author": "Edge",
-	"license": "GNU GENERAL PUBLIC LICENSE",
+	"license": "GPL-3.0-or-later",
 	"authorEmail": "edgemodules@gmail.com",
 	"sourceUrl": "https://github.com/Edge-Modules/Edge",
 	"modules": [
