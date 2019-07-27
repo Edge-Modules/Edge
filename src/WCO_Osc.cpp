@@ -21,7 +21,7 @@ struct VoltageControlledOscillator {
 	float freq[16]={0.0f};
 	float pw = 0.6f;
 	float pitch;
-	//
+	float lfo_param;
 	float width;
 	float widthCv;
 	float _dual;
@@ -60,38 +60,20 @@ struct VoltageControlledOscillator {
 
 
 
+
 // Il va falloir clamp PITCH !
 
 	void setPitch(float pitchKnob, float pitchCv[16], float _lfo_param, int channels) {
 		// Compute frequency
-		pitch = pitchKnob;
-		/*if (analog) {
-			// Apply pitch slew
-			const float pitchSlewAmount = 3.0f;
-			pitch += pitchSlew * pitchSlewAmount;
-		}
-		else {
-        */
-			// Quantize coarse knob if digital mode
-			pitch = roundf(pitch);
-		//}
-
+		lfo_param = _lfo_param;
+        pitch = roundf(pitchKnob);
 		for(int i=0;i<channels;i++){
-            //pitch += pitchCv;
-            // Note C4
             freq[i] = 261.626f * powf(2.0f, (pitch+pitchCv[i]) / 12.0f);
-
             freq[i] = clamp(freq[i],1.0f,10000.0f);
             if(_lfo_param == 0){
                 freq[i] = freq[i]/100;
+            }
 		}
-
-
-
-		}
-
-
-
 	}
 
 	void setInvert(float _invert){
@@ -192,54 +174,55 @@ struct VoltageControlledOscillator {
   	}
 
 
-	void process(float deltaTime, float syncValue, int channels) {
+	void process(float deltaTime, float syncValue[16], int channels) {
 
 
-         int syncIndex = -1; // Index in the oversample loop where sync occurs [0, OVERSAMPLE)
-        float deltaPhase[channels];
-
+        int syncIndex[16] = {-1}; // Index in the oversample loop where sync occurs [0, OVERSAMPLE)
+        float deltaPhase[16]={0.0f};
+        float deltaSync[16]={0.0f};
+        float syncCrossing[16]={0.0f};
         for(int k=0;k<channels;k++){
-            //poly_sync_val[k] = syncValue;
+
 
             deltaPhase[k] = clamp(freq[k] * deltaTime, 1e-6, 0.5f);
 
             // Detect sync
            // int syncIndex = -1; // Index in the oversample loop where sync occurs [0, OVERSAMPLE)
-            float syncCrossing = 0.0f; // Offset that sync occurs [0.0f, 1.0f)
+            syncCrossing[k] = 0.0f; // Offset that sync occurs [0.0f, 1.0f)
             if (syncEnabled) {
-                poly_sync_val[k] -= 0.01f;
-                if (syncValue > 0.0f && lastSyncValue[k] <= 0.0f) {
+                //syncValue[k] -= 0.01f;
+                if (syncValue[k] > 0.0f && lastSyncValue[k] <= 0.0f) {
 
-                    float deltaSync = syncValue - lastSyncValue[k];
-                    syncCrossing = 1.0f - syncValue / deltaSync;
-                    syncCrossing *= OVERSAMPLE;
-                    syncIndex = (int)syncCrossing;
-                    syncCrossing -= syncIndex;
+                    deltaSync[k] = syncValue[k] - lastSyncValue[k];
+                    syncCrossing[k] = 1.0f - syncValue[k] / deltaSync[k];
+                    syncCrossing[k] *= OVERSAMPLE;
+                    syncIndex[k] = (int)syncCrossing[k];
+                    syncCrossing[k] -= syncIndex[k];
 
                     phase[k] = 0.0f;
                 }
-                lastSyncValue[k] = syncValue;
+                lastSyncValue[k] = syncValue[k];
             }
 
             if (syncDirection)
                 deltaPhase[k] *= -1.0f;
 
 
-        }
 
-        int i = int(phase[0]*255)+3;
+
+        int i = int(phase[k]*255);
         if(i>=255.0f){
             i -= 255.0f;
         }
 
             if(invert){
                if(_dual < 0.5f){
-                    if( (phase[0] > al_window and phase[0] < ar_window) or (al_window == 0.0f) ) {
+                    if( (phase[k] > al_window and phase[k] < ar_window) or (al_window == 0.0f) ) {
                         if(i==255){
                             buf_final[i] = (buf_waverear[0]+buf_waverear[255])/2;
                         }
                         else{
-                            if(phase[0]==al_window or  phase[0]==ar_window){
+                            if(phase[k]==al_window or  phase[k]==ar_window){
                                 buf_final[i] = (buf_waverear[255-i]+buf_wavefront[i])/2;
                             }
                             else{
@@ -257,12 +240,12 @@ struct VoltageControlledOscillator {
                     }
                }
                else{
-                    if( (phase[0] > al_window and phase[0] < ar_window) or (phase[0] > bl_window and phase[0] < br_window) or ( al_window == 0.0f and ar_window == 0.5f)) {
+                    if( (phase[k] > al_window and phase[k] < ar_window) or (phase[k] > bl_window and phase[k] < br_window) or ( al_window == 0.0f and ar_window == 0.5f)) {
                         if(i==255){
                             buf_final[i] = (buf_waverear[0] + buf_waverear[255])/2;
                         }
                         else{
-                            if(phase[0]==al_window or  phase[0]==ar_window){
+                            if(phase[k]==al_window or  phase[k]==ar_window){
                                 buf_final[i] = (buf_waverear[255-i]+buf_wavefront[i])/2;
                             }
                             else{
@@ -282,12 +265,12 @@ struct VoltageControlledOscillator {
             }
             else{
                 if(_dual < 0.5f){
-                    if((phase[0] > al_window and phase[0] < ar_window) or (al_window == 0.0f and ar_window == 1.0f)) {
+                    if((phase[k] > al_window and phase[k] < ar_window) or (al_window == 0.0f and ar_window == 1.0f)) {
                         if(i==255){
                             buf_final[i] = (buf_waverear[0]+buf_waverear[255])/2;
                         }
                         else{
-                            if(phase[0]==al_window or  phase[0]==ar_window){
+                            if(phase[k]==al_window or  phase[k]==ar_window){
                                 buf_final[i] = (buf_waverear[i]+buf_wavefront[i])/2;
                             }
                             else{
@@ -305,12 +288,12 @@ struct VoltageControlledOscillator {
                     }
                 }
                 else{
-                    if( (phase[0] > al_window and phase[0] < ar_window) or (phase[0] > bl_window and phase[0] < br_window) or ( al_window == 0.0f and ar_window == 1.0f)) {
+                    if( (phase[k] > al_window and phase[k] < ar_window) or (phase[k] > bl_window and phase[k] < br_window) or ( al_window == 0.0f and ar_window == 1.0f)) {
                         if(i==255){
                             buf_final[i] = (buf_waverear[0]+buf_waverear[255])/2;
                         }
                         else{
-                            if(phase[0]==al_window or  phase[0]==ar_window){
+                            if(phase[k]==al_window or  phase[k]==ar_window){
                                 buf_final[i] = (buf_waverear[i]+buf_wavefront[i])/2;
                             }
                             else{
@@ -332,16 +315,17 @@ struct VoltageControlledOscillator {
 
 
 
-        for(int k=0;k<channels;k++){
+
             sqrFilter[k].setCutoff(44100.0f * deltaTime);
 
             for (int j = 0; j < OVERSAMPLE; j++) {
-                if (syncIndex == i) {
+                /*
+                if (syncIndex[k] == i) {
                         phase[k] = 0.0f;
                 }
-
+*/
                 // Advance phase
-                sinBuffer[k][j]= interpolateLinear(buf_final, phase[k]*255.0f) ;
+                sinBuffer[k][j]= interpolateLinear(buf_final, phase[k]*255.0f-3) ;
                 sqrFilter[k].process(sinBuffer[k][j]);
                 sinBuffer[k][j]=sqrFilter[k].lowpass();
                 phase[k] += deltaPhase[k] / OVERSAMPLE;
@@ -432,6 +416,9 @@ struct WCO_Osc : Module {
 
 	//Poly
 	float pitchCv[16]={0.0f};
+
+	//Sync Poly
+	float sync_poly[16] = {0.0f};
 
 	WCO_Osc() {
 		config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
@@ -553,7 +540,31 @@ void WCO_Osc::process(const ProcessArgs &args)  {
         oscillator.setWaves( params[FRONT_PARAM].getValue()+(params[CV_FRONT_PARAM].getValue()*(inputs[FRONT_INPUT].getVoltage()/5)),params[REAR_PARAM].getValue()+(params[CV_REAR_PARAM].getValue()*(inputs[REAR_INPUT].getVoltage()/5)),autoscale,wave);
     }
 
-    oscillator.process(args.sampleTime, inputs[SYNK_INPUT].getVoltage(),channels);
+
+    //SYNC Polyphony
+
+
+    int sync_channels = inputs[SYNK_INPUT].getChannels();
+
+    for(int k = 0; k < channels ; k++)
+    {
+        if(k>=sync_channels){
+            sync_poly[k]= inputs[SYNK_INPUT].getVoltage(0);
+        }
+        else{
+            sync_poly[k]= inputs[SYNK_INPUT].getVoltage(k);
+        }
+
+    }
+    //sync_poly = inputs[SYNK_INPUT].getVoltage();
+
+
+
+
+
+    oscillator.process(args.sampleTime, sync_poly,channels);
+
+    //oscillator.process(args.sampleTime, inputs[SYNK_INPUT].getVoltage(),channels);
 
     // Set output
     for (int c = 0; c < channels; c++) {
