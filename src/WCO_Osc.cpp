@@ -210,7 +210,7 @@ struct VoltageControlledOscillator {
 
 
 
-        int i = int(phase[k]*255);
+        int i = int(phase[k]*255)+3;
         if(i>=255.0f){
             i -= 255.0f;
         }
@@ -325,7 +325,7 @@ struct VoltageControlledOscillator {
                 }
 */
                 // Advance phase
-                sinBuffer[k][j]= interpolateLinear(buf_final, phase[k]*255.0f-3) ;
+                sinBuffer[k][j]= interpolateLinear(buf_final, phase[k]*255.0f) ;
                 sqrFilter[k].process(sinBuffer[k][j]);
                 sinBuffer[k][j]=sqrFilter[k].lowpass();
                 phase[k] += deltaPhase[k] / OVERSAMPLE;
