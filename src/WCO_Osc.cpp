@@ -516,7 +516,7 @@ void WCO_Osc::process(const ProcessArgs &args)  {
 
 
         if (inputs[FM_INPUT].active || inputs[FM_INPUT].getVoltage() != l_FM_INPUT ) {
-            pitchCv[c] += dsp::quadraticBipolar(params[FM_PARAM].getValue()) * 12.0f * inputs[FM_INPUT].getVoltage();
+            pitchCv[c] += dsp::quadraticBipolar(params[FM_PARAM].getValue()) * 12.0f * inputs[FM_INPUT].getVoltage(c);
         }
 
     }
