@@ -115,7 +115,7 @@ struct VoltageControlledOscillator {
 	    float coef2f = 1 - coef1f;
         float coef1r = _waverear-int(_waverear);
 	    float coef2r = 1 - coef1r;
-	    float max_wav_f, max_wav_r = 0.0f;
+	    float max_wav_f = 0.0f, max_wav_r = 0.0f;
         for(int i = 0; i<=255; i++){
 
             if(_wavefront<63){
